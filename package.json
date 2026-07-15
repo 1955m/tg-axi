@@ -1,0 +1,58 @@
+{
+  "name": "tg-axi",
+  "version": "0.1.0",
+  "description": "AXI-compliant Telegram CLI — out-of-band alert delivery for agents, token-efficient TOON output, chunked sends with 429 backoff",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kunchenguid/axi-tools.git",
+    "directory": "packages/tg-axi"
+  },
+  "keywords": [
+    "telegram",
+    "cli",
+    "agent",
+    "axi",
+    "toon",
+    "alerts",
+    "bot"
+  ],
+  "bin": {
+    "tg-axi": "./dist/bin/tg-axi.js"
+  },
+  "files": [
+    "dist",
+    "skills/tg-axi",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:skill": "node -e \"import('./dist/src/skill.js').then(m=>{const fs=require('fs');fs.mkdirSync('skills/tg-axi',{recursive:true});fs.writeFileSync('skills/tg-axi/SKILL.md',m.createSkillMarkdown()+'\\n');console.log('wrote skills/tg-axi/SKILL.md');})\"",
+    "dev": "tsx bin/tg-axi.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --max-warnings=0"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@toon-format/toon": "^2.1.0",
+    "axi-sdk-js": "^0.1.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^3.0.0"
+  }
+}
