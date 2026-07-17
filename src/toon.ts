@@ -46,14 +46,7 @@ type Item = Record<string, any>;
 
 export interface FieldDef<T> {
   type:
-    | "field"
-    | "pluck"
-    | "joinArray"
-    | "relativeTime"
-    | "boolYesNo"
-    | "mapEnum"
-    | "lower"
-    | "custom";
+    "field" | "pluck" | "joinArray" | "relativeTime" | "boolYesNo" | "mapEnum" | "lower" | "custom";
   key?: string;
   subkey?: string | null;
   as?: string;
@@ -80,9 +73,7 @@ export function extract<T>(item: T, schema: FieldDef<T>[]): Item {
         const arr = record[def.key!];
         if (Array.isArray(arr) && arr.length > 0) {
           result[outputKey] = arr
-            .map((x) =>
-              typeof x === "string" ? x : x?.[def.subkey as string],
-            )
+            .map((x) => (typeof x === "string" ? x : x?.[def.subkey as string]))
             .join(",");
         } else {
           result[outputKey] = def.empty ?? "none";
@@ -106,9 +97,7 @@ export function extract<T>(item: T, schema: FieldDef<T>[]): Item {
       }
       case "lower":
         result[outputKey] =
-          typeof record[def.key!] === "string"
-            ? record[def.key!].toLowerCase()
-            : record[def.key!];
+          typeof record[def.key!] === "string" ? record[def.key!].toLowerCase() : record[def.key!];
         break;
       case "custom":
         result[outputKey] = def.fn!(item);
@@ -121,21 +110,13 @@ export function extract<T>(item: T, schema: FieldDef<T>[]): Item {
 }
 
 /** Render a labeled list of items as TOON. */
-export function renderList<T>(
-  label: string,
-  items: T[],
-  schema: FieldDef<T>[],
-): string {
+export function renderList<T>(label: string, items: T[], schema: FieldDef<T>[]): string {
   const extracted = items.map((item) => extract(item, schema));
   return encode({ [label]: extracted });
 }
 
 /** Render a single labeled detail object as TOON. */
-export function renderDetail<T>(
-  label: string,
-  item: T,
-  schema: FieldDef<T>[],
-): string {
+export function renderDetail<T>(label: string, item: T, schema: FieldDef<T>[]): string {
   const extracted = extract(item, schema);
   return encode({ [label]: extracted });
 }

@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main, DESCRIPTION } from "./cli.js";
 import { createSkillMarkdown } from "./skill.js";
 
@@ -54,18 +56,28 @@ describe("main (in-process)", () => {
     await main({ argv: ["--help"], stdout: out.stdout });
     const text = out.chunks.join("");
     expect(text).toContain("usage:");
-    expect(text).toContain("commands[5]:");
+    expect(text).toContain("commands[6]:");
     expect(text).toContain("--chat");
     expect(text).toContain("built-in");
   });
 
-  it("lists receive/listen in the top-level commands and examples", async () => {
+  it("lists receive/listen/setup in the top-level commands and examples", async () => {
     const out = capture();
     await main({ argv: ["--help"], stdout: out.stdout });
     const text = out.chunks.join("");
     expect(text).toContain("receive");
     expect(text).toContain("listen");
+    expect(text).toContain("setup");
     expect(text).toContain("tg-axi receive --json --timeout 30");
+    expect(text).toContain("tg-axi setup hooks");
+  });
+
+  it("renders per-command help for `setup --help`", async () => {
+    const out = capture();
+    await main({ argv: ["setup", "--help"], stdout: out.stdout });
+    const text = out.chunks.join("");
+    expect(text).toContain("tg-axi setup hooks");
+    expect(text).toContain("Claude Code, Codex, and OpenCode");
   });
 
   it("renders the session digest header (offline, no token)", async () => {
@@ -126,7 +138,10 @@ describe("send validation (in-process, offline)", () => {
   it("rejects an invalid --priority", async () => {
     process.env["TELEGRAM_BOT_TOKEN"] = "fake-token";
     const out = capture();
-    await main({ argv: ["send", "--priority", "bogus", "--text-file", "x.txt"], stdout: out.stdout });
+    await main({
+      argv: ["send", "--priority", "bogus", "--text-file", "x.txt"],
+      stdout: out.stdout,
+    });
     const text = out.chunks.join("");
     expect(text).toContain("VALIDATION_ERROR");
     expect(text).toContain("priority");
@@ -137,6 +152,14 @@ describe("send validation (in-process, offline)", () => {
     await main({ argv: ["send", "--text-file", "x.txt"], stdout: out.stdout });
     const text = out.chunks.join("");
     expect(text).toContain("AUTH_REQUIRED");
+  });
+
+  it("rejects an unknown flag with VALIDATION_ERROR before auth (P6: fail loud)", async () => {
+    const out = capture();
+    await main({ argv: ["send", "--bogus", "--stdin"], stdout: out.stdout });
+    const text = out.chunks.join("");
+    expect(text).toContain("VALIDATION_ERROR");
+    expect(text).toContain("unknown flag --bogus");
   });
 
   it("reports a missing --text-file path", async () => {
@@ -157,7 +180,7 @@ describe("createSkillMarkdown", () => {
     const md = createSkillMarkdown();
     expect(md).toContain("---\nname: tg-axi");
     expect(md).toContain("category: comms");
-    expect(md).toContain("commands[5]:");
+    expect(md).toContain("commands[6]:");
     expect(md).toContain("npx -y tg-axi");
   });
 
@@ -167,9 +190,25 @@ describe("createSkillMarkdown", () => {
     expect(md).toContain("listen");
   });
 
+  it("documents the setup hooks integration (P7)", () => {
+    const md = createSkillMarkdown();
+    expect(md).toContain("setup hooks");
+    expect(md).toContain("Claude Code, Codex, and OpenCode");
+  });
+
   it("documents the token file location", () => {
     const md = createSkillMarkdown();
     expect(md).toContain("~/.claude/channels/telegram/.env");
     expect(md).toContain("TELEGRAM_BOT_TOKEN");
+  });
+});
+
+describe("SKILL.md staleness (AXI P7)", () => {
+  it("the committed SKILL.md matches createSkillMarkdown() (docs:check parity)", () => {
+    const committed = readFileSync(
+      fileURLToPath(new URL("../skills/tg-axi/SKILL.md", import.meta.url)),
+      "utf8",
+    );
+    expect(committed).toBe(createSkillMarkdown() + "\n");
   });
 });

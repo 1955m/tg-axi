@@ -8,13 +8,9 @@ import {
 } from "../config.js";
 import { deleteWebhook } from "../tg.js";
 import { hasFlag, parseLimitFlag, parseTimeoutFlag, takeBoolFlag, takeFlag } from "../args.js";
-import { requireToken, type TgContext } from "../context.js";
+import { rejectUnknownFlags, requireToken, type TgContext } from "../context.js";
 import { loadAllowList } from "../access.js";
-import {
-  buildReceiveOutput,
-  drainUpdates,
-  type ReceiveOptions,
-} from "../receive.js";
+import { buildReceiveOutput, drainUpdates, type ReceiveOptions } from "../receive.js";
 
 export const RECEIVE_HELP = `usage: tg-axi receive [flags]
 One-shot drain: call getUpdates with the persisted offset, normalize all new
@@ -36,8 +32,24 @@ examples:
   tg-axi receive --drop-pending-webhook
 `;
 
-export async function receiveCommand(args: string[], ctx: TgContext): Promise<Record<string, unknown> | string> {
+export async function receiveCommand(
+  args: string[],
+  ctx: TgContext,
+): Promise<Record<string, unknown> | string> {
   if (args[0] === "--help") return RECEIVE_HELP;
+  rejectUnknownFlags(
+    args,
+    [
+      "--limit",
+      "--timeout",
+      "--json",
+      "--drop-pending-webhook",
+      "--inbox",
+      "--offset-file",
+      "--no-download",
+    ],
+    "receive",
+  );
   const apiCtx = requireToken(ctx);
 
   const json = hasFlag(args, "--json");

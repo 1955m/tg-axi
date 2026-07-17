@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   parseContextArgs,
+  rejectUnknownFlags,
   requireToken,
   resolveChatId,
   type TgContext,
@@ -57,5 +58,47 @@ describe("requireToken", () => {
   it("returns a validated {token, chatId} when a token is present", () => {
     const ctx: TgContext = { token: "tok", chatId: "9" };
     expect(requireToken(ctx)).toEqual({ token: "tok", chatId: "9" });
+  });
+});
+
+describe("rejectUnknownFlags (AXI P6: fail loud on unknown flags)", () => {
+  it("passes silently when every flag is known", () => {
+    expect(() =>
+      rejectUnknownFlags(["--title", "x", "--stdin"], ["--title", "--stdin"], "send"),
+    ).not.toThrow();
+  });
+
+  it("allows the --chat and --help globals even when not declared known", () => {
+    expect(() =>
+      rejectUnknownFlags(["--chat", "123", "--help"], ["--stdin"], "send"),
+    ).not.toThrow();
+  });
+
+  it("rejects an unknown flag by name with VALIDATION_ERROR + the valid-flag list", () => {
+    let err: unknown;
+    try {
+      rejectUnknownFlags(["--bogus"], ["--stdin", "--title"], "send");
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect((err as Error).message).toContain("unknown flag --bogus");
+    expect((err as Error).message).toContain("`send`");
+    const suggestions = (err as { suggestions?: string[] }).suggestions ?? [];
+    expect(suggestions.some((s) => s.includes("--stdin") && s.includes("--title"))).toBe(true);
+  });
+
+  it("extracts the flag name from --flag=value form before rejecting", () => {
+    let err: unknown;
+    try {
+      rejectUnknownFlags(["--bogus=1"], [], "status");
+    } catch (e) {
+      err = e;
+    }
+    expect((err as Error).message).toContain("unknown flag --bogus");
+  });
+
+  it("leaves positional (non-dash) args alone", () => {
+    expect(() => rejectUnknownFlags(["hooks"], [], "setup hooks")).not.toThrow();
   });
 });

@@ -40,14 +40,22 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-interface MockResp { status: number; json?: unknown; bytes?: Buffer; okEnvelope?: boolean; errorDescription?: string; }
+interface MockResp {
+  status: number;
+  json?: unknown;
+  bytes?: Buffer;
+  okEnvelope?: boolean;
+  errorDescription?: string;
+}
 function mockResponse(r: MockResp): Response {
   const isFile = r.bytes !== undefined;
-  const body = isFile ? "" : JSON.stringify(
-    r.okEnvelope === false
-      ? { ok: false, error_code: r.status, description: r.errorDescription ?? "err" }
-      : { ok: true, result: r.json },
-  );
+  const body = isFile
+    ? ""
+    : JSON.stringify(
+        r.okEnvelope === false
+          ? { ok: false, error_code: r.status, description: r.errorDescription ?? "err" }
+          : { ok: true, result: r.json },
+      );
   const ab = new ArrayBuffer(r.bytes?.length ?? 0);
   if (r.bytes) new Uint8Array(ab).set(r.bytes);
   return {
@@ -57,15 +65,28 @@ function mockResponse(r: MockResp): Response {
     arrayBuffer: () => Promise.resolve(ab),
   } as Response;
 }
-function ok(json: unknown): MockResp { return { status: 200, json }; }
-function fail(code: number, desc: string): MockResp { return { status: code, okEnvelope: false, errorDescription: desc }; }
+function ok(json: unknown): MockResp {
+  return { status: 200, json };
+}
+function fail(code: number, desc: string): MockResp {
+  return { status: code, okEnvelope: false, errorDescription: desc };
+}
 function mockFetch(handler: (url: string, init: RequestInit) => MockResp): void {
   globalThis.fetch = ((url: string, init: RequestInit) =>
     Promise.resolve(mockResponse(handler(url, init)))) as unknown as typeof fetch;
 }
 
 const UPDATES: TgUpdate[] = [
-  { update_id: 50, message: { message_id: 1, from: { id: 1, username: "alice", first_name: "A" }, chat: { id: 123456789, type: "private" }, date: 1700, text: "hello" } },
+  {
+    update_id: 50,
+    message: {
+      message_id: 1,
+      from: { id: 1, username: "alice", first_name: "A" },
+      chat: { id: 123456789, type: "private" },
+      date: 1700,
+      text: "hello",
+    },
+  },
 ];
 
 describe("receiveCommand", () => {
@@ -105,18 +126,32 @@ describe("receiveCommand", () => {
   });
 
   it("rejects an invalid --limit with VALIDATION_ERROR", async () => {
-    await expect(receiveCommand(["--limit", "0"], CTX)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(receiveCommand(["--limit", "101"], CTX)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(receiveCommand(["--limit", "0"], CTX)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    await expect(receiveCommand(["--limit", "101"], CTX)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 
   it("rejects an invalid --timeout with VALIDATION_ERROR", async () => {
-    await expect(receiveCommand(["--timeout", "-1"], CTX)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(receiveCommand(["--timeout", "51"], CTX)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(receiveCommand(["--timeout", "-1"], CTX)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    await expect(receiveCommand(["--timeout", "51"], CTX)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 
   it("--help returns the RECEIVE_HELP text", async () => {
     const out = await receiveCommand(["--help"], CTX);
     expect(out).toBe(RECEIVE_HELP);
+  });
+
+  it("rejects an unknown flag with VALIDATION_ERROR (P6: fail loud)", async () => {
+    await expect(receiveCommand(["--bogus"], CTX)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 
   it("surfaces a 409 conflict as a structured AxiError (VALIDATION_ERROR)", async () => {
@@ -125,7 +160,9 @@ describe("receiveCommand", () => {
   });
 
   it("throws AUTH_REQUIRED when no token is present", async () => {
-    await expect(receiveCommand([], { token: undefined, chatId: "123456789" })).rejects.toMatchObject({
+    await expect(
+      receiveCommand([], { token: undefined, chatId: "123456789" }),
+    ).rejects.toMatchObject({
       code: "AUTH_REQUIRED",
     });
   });
@@ -134,7 +171,10 @@ describe("receiveCommand", () => {
     const inbox = join(dir, "custom-inbox");
     const off = join(dir, "custom-offset");
     mockFetch(() => ok(UPDATES));
-    const out = (await receiveCommand(["--inbox", inbox, "--offset-file", off], CTX)) as Record<string, unknown>;
+    const out = (await receiveCommand(["--inbox", inbox, "--offset-file", off], CTX)) as Record<
+      string,
+      unknown
+    >;
     expect(out["inbox"]).toBe(inbox);
     expect(out["offset"]).toBe(51);
   });

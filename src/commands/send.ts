@@ -5,7 +5,7 @@ import { hasFlag, takeFlag } from "../args.js";
 import { isStdinTTY, readStdin } from "../stdin.js";
 import { sendChunks } from "../tg.js";
 import { renderHelp, renderOutput } from "../toon.js";
-import { requireToken, type TgContext } from "../context.js";
+import { rejectUnknownFlags, requireToken, type TgContext } from "../context.js";
 import { DEFAULT_CHAT, TG_TEXT_LIMIT } from "../config.js";
 
 export const SEND_HELP = `usage: tg-axi send [flags]
@@ -27,6 +27,7 @@ const VALID_PRIORITIES = new Set(["high", "low", "silent", "normal"]);
 
 export async function sendCommand(args: string[], ctx: TgContext): Promise<string> {
   if (args[0] === "--help") return SEND_HELP;
+  rejectUnknownFlags(args, ["--title", "--priority", "--text-file", "--stdin"], "send");
   const apiCtx = requireToken(ctx);
 
   const useStdin = hasFlag(args, "--stdin");
@@ -45,7 +46,7 @@ export async function sendCommand(args: string[], ctx: TgContext): Promise<strin
     throw new AxiError(
       "Use only one text source: --stdin or --text-file, not both",
       "VALIDATION_ERROR",
-      ["echo -n \"...\" | tg-axi send --stdin", "tg-axi send --text-file ./digest.txt"],
+      ['echo -n "..." | tg-axi send --stdin', "tg-axi send --text-file ./digest.txt"],
     );
   }
   if (!useStdin && !textFile) {
@@ -54,7 +55,7 @@ export async function sendCommand(args: string[], ctx: TgContext): Promise<strin
       "VALIDATION_ERROR",
       [
         'echo -n "alert body" | tg-axi send --stdin',
-        "tg-axi send --text-file ./digest.txt --title \"wedge alarm\"",
+        'tg-axi send --text-file ./digest.txt --title "wedge alarm"',
       ],
     );
   }

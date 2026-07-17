@@ -86,7 +86,12 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 function isTransient(error: unknown): boolean {
   if (error && typeof error === "object" && "code" in error) {
     const code = (error as { code: string }).code;
-    return code === "NETWORK_ERROR" || code === "TIMEOUT" || code === "UNKNOWN" || code === "RATE_LIMITED";
+    return (
+      code === "NETWORK_ERROR" ||
+      code === "TIMEOUT" ||
+      code === "UNKNOWN" ||
+      code === "RATE_LIMITED"
+    );
   }
   return true; // unknown non-AxiError → treat as transient so listen survives.
 }
@@ -121,7 +126,14 @@ export async function drainUpdates(
     newOffset = updates.reduce((m, u) => Math.max(m, u.update_id), 0) + 1;
     writeOffset(newOffset, opts.offsetFile);
   }
-  return { messages, rejected, unsupported, offsetBefore: offset, newOffset, updatesCount: updates.length };
+  return {
+    messages,
+    rejected,
+    unsupported,
+    offsetBefore: offset,
+    newOffset,
+    updatesCount: updates.length,
+  };
 }
 
 /**
@@ -298,34 +310,128 @@ async function normalizeMessage(
     return { ...base, type: "text", text: msg.text };
   }
   if (msg.voice) {
-    return mediaRecord(base, "voice", msg.voice, { caption, duration: msg.voice.duration, mime: msg.voice.mime_type, ext: "oga" }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "voice",
+      msg.voice,
+      { caption, duration: msg.voice.duration, mime: msg.voice.mime_type, ext: "oga" },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.audio) {
-    return mediaRecord(base, "audio", msg.audio, { caption, duration: msg.audio.duration, mime: msg.audio.mime_type, performer: msg.audio.performer, title: msg.audio.title, name: msg.audio.file_name, ext: "mp3" }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "audio",
+      msg.audio,
+      {
+        caption,
+        duration: msg.audio.duration,
+        mime: msg.audio.mime_type,
+        performer: msg.audio.performer,
+        title: msg.audio.title,
+        name: msg.audio.file_name,
+        ext: "mp3",
+      },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.photo) {
     const largest = pickLargestPhoto(msg.photo);
     if (largest) {
-      return mediaRecord(base, "photo", largest, { caption, mime: "image/jpeg", width: largest.width, height: largest.height }, apiCtx, opts);
+      return mediaRecord(
+        base,
+        "photo",
+        largest,
+        { caption, mime: "image/jpeg", width: largest.width, height: largest.height },
+        apiCtx,
+        opts,
+      );
     }
   }
   if (msg.video) {
-    return mediaRecord(base, "video", msg.video, { caption, duration: msg.video.duration, mime: msg.video.mime_type, width: msg.video.width, height: msg.video.height, name: msg.video.file_name, ext: "mp4" }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "video",
+      msg.video,
+      {
+        caption,
+        duration: msg.video.duration,
+        mime: msg.video.mime_type,
+        width: msg.video.width,
+        height: msg.video.height,
+        name: msg.video.file_name,
+        ext: "mp4",
+      },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.video_note) {
-    return mediaRecord(base, "video_note", msg.video_note, { duration: msg.video_note.duration, length: msg.video_note.length, mime: "video/mp4" }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "video_note",
+      msg.video_note,
+      { duration: msg.video_note.duration, length: msg.video_note.length, mime: "video/mp4" },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.document) {
-    return mediaRecord(base, "document", msg.document, { caption, mime: msg.document.mime_type, name: msg.document.file_name }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "document",
+      msg.document,
+      { caption, mime: msg.document.mime_type, name: msg.document.file_name },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.animation) {
-    return mediaRecord(base, "animation", msg.animation, { caption, duration: msg.animation.duration, mime: msg.animation.mime_type, width: msg.animation.width, height: msg.animation.height, name: msg.animation.file_name, ext: "mp4" }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "animation",
+      msg.animation,
+      {
+        caption,
+        duration: msg.animation.duration,
+        mime: msg.animation.mime_type,
+        width: msg.animation.width,
+        height: msg.animation.height,
+        name: msg.animation.file_name,
+        ext: "mp4",
+      },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.sticker) {
-    return mediaRecord(base, "sticker", msg.sticker, { emoji: msg.sticker.emoji, set_name: msg.sticker.set_name, width: msg.sticker.width, height: msg.sticker.height, is_animated: msg.sticker.is_animated, is_video: msg.sticker.is_video, sticker_type: msg.sticker.type, mime: stickerMime(msg.sticker) }, apiCtx, opts);
+    return mediaRecord(
+      base,
+      "sticker",
+      msg.sticker,
+      {
+        emoji: msg.sticker.emoji,
+        set_name: msg.sticker.set_name,
+        width: msg.sticker.width,
+        height: msg.sticker.height,
+        is_animated: msg.sticker.is_animated,
+        is_video: msg.sticker.is_video,
+        sticker_type: msg.sticker.type,
+        mime: stickerMime(msg.sticker),
+      },
+      apiCtx,
+      opts,
+    );
   }
   if (msg.location) {
-    return { ...base, type: "location", longitude: msg.location.longitude, latitude: msg.location.latitude };
+    return {
+      ...base,
+      type: "location",
+      longitude: msg.location.longitude,
+      latitude: msg.location.latitude,
+    };
   }
   if (msg.contact) {
     return {
@@ -418,16 +524,40 @@ async function fetchMedia(
   const mime = extra.mime ?? media.mime_type ?? null;
   const name = extra.name ?? null;
   if (opts.noDownload) {
-    return { file: null, downloaded: false, reason: "no-download", mime, size, name, file_id: fileId };
+    return {
+      file: null,
+      downloaded: false,
+      reason: "no-download",
+      mime,
+      size,
+      name,
+      file_id: fileId,
+    };
   }
   if (!fileId) {
-    return { file: null, downloaded: false, reason: "missing file_id", mime, size, name, file_id: fileId };
+    return {
+      file: null,
+      downloaded: false,
+      reason: "missing file_id",
+      mime,
+      size,
+      name,
+      file_id: fileId,
+    };
   }
   try {
     const file = await getFile(fileId, apiCtx, opts.requestOpts ?? {});
     const filePath = file.file_path;
     if (!filePath) {
-      return { file: null, downloaded: false, reason: "no file_path from getFile", mime, size: size ?? file.file_size ?? null, name, file_id: fileId };
+      return {
+        file: null,
+        downloaded: false,
+        reason: "no file_path from getFile",
+        mime,
+        size: size ?? file.file_size ?? null,
+        name,
+        file_id: fileId,
+      };
     }
     const bytes = await downloadTgFile(filePath, apiCtx, opts.requestOpts ?? {});
     const basename = safeBasename(filePath, mime, extra.ext);
@@ -438,7 +568,14 @@ async function fetchMedia(
       mkdirSync(opts.inboxDir, { recursive: true });
       writeFileSync(localPath, bytes);
     }
-    return { file: localPath, downloaded: true, mime, size: size ?? file.file_size ?? bytes.length, name: name ?? basename, file_id: fileId };
+    return {
+      file: localPath,
+      downloaded: true,
+      mime,
+      size: size ?? file.file_size ?? bytes.length,
+      name: name ?? basename,
+      file_id: fileId,
+    };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { file: null, downloaded: false, reason, mime, size, name, file_id: fileId };
@@ -469,7 +606,11 @@ function scorePhoto(s: TgPhotoSize): number {
 
 /** A filesystem-safe basename, deriving an extension from mime when the path lacks one. */
 function safeBasename(filePath: string, mime: string | null, fallbackExt?: string): string {
-  const raw = String(filePath).replace(/[\\/]+/g, "/").split("/").pop() ?? "";
+  const raw =
+    String(filePath)
+      .replace(/[\\/]+/g, "/")
+      .split("/")
+      .pop() ?? "";
   let name = raw.length > 0 ? raw : `file_${Date.now()}`;
   if (!extname(name)) {
     const ext = mimeExtension(mime) ?? fallbackExt ?? "bin";
@@ -496,7 +637,9 @@ function mimeExtension(mime: string | null): string | null {
   return map[mime.toLowerCase()] ?? null;
 }
 
-function stickerMime(s: TgMediaBase & { is_video?: boolean; is_animated?: boolean; type?: string }): string {
+function stickerMime(
+  s: TgMediaBase & { is_video?: boolean; is_animated?: boolean; type?: string },
+): string {
   if (s.is_video) return "video/webm";
   if (s.type === "video") return "video/webm";
   if (s.is_animated || s.type === "animated" || s.type === "mask") return "image/webp";

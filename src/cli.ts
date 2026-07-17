@@ -2,17 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAxiCli } from "axi-sdk-js";
-import {
-  parseContextArgs,
-  resolveTgContext,
-  type TgContext,
-} from "./context.js";
+import { parseContextArgs, resolveTgContext, type TgContext } from "./context.js";
 import { createSkillMarkdown } from "./skill.js";
 import { homeCommand, HOME_HELP } from "./commands/home.js";
 import { sendCommand, SEND_HELP } from "./commands/send.js";
 import { statusCommand, STATUS_HELP } from "./commands/status.js";
 import { receiveCommand, RECEIVE_HELP } from "./commands/receive.js";
 import { listenCommand, LISTEN_HELP } from "./commands/listen.js";
+import { setupCommand, SETUP_HELP } from "./commands/setup.js";
 import { DEFAULT_CHAT } from "./config.js";
 
 export const DESCRIPTION =
@@ -21,8 +18,8 @@ export const DESCRIPTION =
 const VERSION = readPackageVersion();
 
 export const TOP_HELP = `usage: tg-axi [command] [args] [flags]
-commands[5]:
-  (none)=session, send, status, receive, listen
+commands[6]:
+  (none)=session, send, status, receive, listen, setup
 flags[3]:
   --chat <id> (after command; default ${DEFAULT_CHAT}), --help, -v/-V/--version
 auth:
@@ -35,6 +32,7 @@ examples:
   tg-axi send --chat ${DEFAULT_CHAT} --stdin
   tg-axi receive --json --timeout 30
   tg-axi listen
+  tg-axi setup hooks
 `;
 
 const COMMAND_HELP: Record<string, string> = {
@@ -42,6 +40,7 @@ const COMMAND_HELP: Record<string, string> = {
   status: STATUS_HELP,
   receive: RECEIVE_HELP,
   listen: LISTEN_HELP,
+  setup: SETUP_HELP,
   home: HOME_HELP,
 };
 
@@ -50,6 +49,7 @@ const COMMANDS = {
   status: withContext(statusCommand),
   receive: withContext(receiveCommand),
   listen: withContext(listenCommand),
+  setup: withContext(setupCommand),
 };
 
 export interface MainOptions {
@@ -113,7 +113,10 @@ function readPackageVersion(): string {
 function withContext(
   handler: (args: string[], ctx: TgContext) => Promise<string | Record<string, unknown>>,
 ): (args: string[], ctx: TgContext | undefined) => Promise<string | Record<string, unknown>> {
-  return (args: string[], ctx: TgContext | undefined): Promise<string | Record<string, unknown>> => {
+  return (
+    args: string[],
+    ctx: TgContext | undefined,
+  ): Promise<string | Record<string, unknown>> => {
     const context: TgContext = ctx ?? { token: undefined, chatId: DEFAULT_CHAT };
     const { strippedArgs } = parseContextArgs(args);
     return handler(strippedArgs, context);

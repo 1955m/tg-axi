@@ -49,14 +49,22 @@ function opts(over: Partial<ReceiveOptions> = {}): ReceiveOptions {
   };
 }
 
-interface MockResp { status: number; json?: unknown; bytes?: Buffer; okEnvelope?: boolean; errorDescription?: string; }
+interface MockResp {
+  status: number;
+  json?: unknown;
+  bytes?: Buffer;
+  okEnvelope?: boolean;
+  errorDescription?: string;
+}
 function mockResponse(r: MockResp): Response {
   const isFile = r.bytes !== undefined;
-  const body = isFile ? "" : JSON.stringify(
-    r.okEnvelope === false
-      ? { ok: false, error_code: r.status, description: r.errorDescription ?? "err" }
-      : { ok: true, result: r.json },
-  );
+  const body = isFile
+    ? ""
+    : JSON.stringify(
+        r.okEnvelope === false
+          ? { ok: false, error_code: r.status, description: r.errorDescription ?? "err" }
+          : { ok: true, result: r.json },
+      );
   const ab = new ArrayBuffer(r.bytes?.length ?? 0);
   if (r.bytes) new Uint8Array(ab).set(r.bytes);
   return {
@@ -66,15 +74,30 @@ function mockResponse(r: MockResp): Response {
     arrayBuffer: () => Promise.resolve(ab),
   } as Response;
 }
-function ok(json: unknown): MockResp { return { status: 200, json }; }
-function fail(code: number, desc: string): MockResp { return { status: code, okEnvelope: false, errorDescription: desc }; }
-function mockFetch(handler: (url: string, init: RequestInit) => MockResp | Promise<MockResp>): void {
+function ok(json: unknown): MockResp {
+  return { status: 200, json };
+}
+function fail(code: number, desc: string): MockResp {
+  return { status: code, okEnvelope: false, errorDescription: desc };
+}
+function mockFetch(
+  handler: (url: string, init: RequestInit) => MockResp | Promise<MockResp>,
+): void {
   globalThis.fetch = ((url: string, init: RequestInit) =>
     Promise.resolve(handler(url, init)).then(mockResponse)) as unknown as typeof fetch;
 }
 
 function update(id: number, text: string): TgUpdate {
-  return { update_id: id, message: { message_id: id, from: { id: 1, username: "u", first_name: "U" }, chat: { id: 123456789, type: "private" }, date: 1700, text } };
+  return {
+    update_id: id,
+    message: {
+      message_id: id,
+      from: { id: 1, username: "u", first_name: "U" },
+      chat: { id: 123456789, type: "private" },
+      date: 1700,
+      text,
+    },
+  };
 }
 
 describe("listenUpdates", () => {
@@ -89,7 +112,10 @@ describe("listenUpdates", () => {
     const summary = await listenUpdates(
       CTX,
       opts(),
-      (r) => { emitted.push(r); stop = true; },
+      (r) => {
+        emitted.push(r);
+        stop = true;
+      },
       () => stop,
     );
     expect(summary.batches).toBe(1);
@@ -105,7 +131,10 @@ describe("listenUpdates", () => {
       CTX,
       opts(),
       () => undefined,
-      () => { calls++; return calls > 1; }, // run 1 empty batch, then stop
+      () => {
+        calls++;
+        return calls > 1;
+      }, // run 1 empty batch, then stop
     );
     expect(summary.batches).toBe(1);
     expect(summary.messages).toBe(0);
@@ -125,8 +154,16 @@ describe("listenUpdates", () => {
     let stop = false;
     const summary = await listenUpdates(
       CTX,
-      opts({ requestOpts: { sleep: async () => { sleepCalls++; } } }),
-      () => { stop = true; },
+      opts({
+        requestOpts: {
+          sleep: async () => {
+            sleepCalls++;
+          },
+        },
+      }),
+      () => {
+        stop = true;
+      },
       () => stop,
     );
     expect(getUpdatesCalls).toBe(2);
@@ -138,7 +175,10 @@ describe("listenUpdates", () => {
   it("propagates a 409 conflict (operator action), does not retry", async () => {
     let getUpdatesCalls = 0;
     mockFetch((url) => {
-      if (url.includes("/getUpdates")) { getUpdatesCalls++; return fail(409, "Conflict: terminated"); }
+      if (url.includes("/getUpdates")) {
+        getUpdatesCalls++;
+        return fail(409, "Conflict: terminated");
+      }
       return ok([]);
     });
     await expect(
@@ -173,7 +213,10 @@ describe("listenUpdates", () => {
     });
     const stop = new AbortController();
     let stopped = false;
-    setTimeout(() => { stopped = true; stop.abort(); }, 5);
+    setTimeout(() => {
+      stopped = true;
+      stop.abort();
+    }, 5);
     const summary = await listenUpdates(
       CTX,
       opts({ timeout: 30 }),
@@ -193,11 +236,23 @@ describe("listenCommand (glue)", () => {
   });
 
   it("rejects an invalid --limit / --timeout", async () => {
-    await expect(listenCommand(["--limit", "0"], { token: "t", chatId: "1" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(listenCommand(["--timeout", "99"], { token: "t", chatId: "1" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      listenCommand(["--limit", "0"], { token: "t", chatId: "1" }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      listenCommand(["--timeout", "99"], { token: "t", chatId: "1" }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("rejects an unknown flag with VALIDATION_ERROR (P6: fail loud)", async () => {
+    await expect(listenCommand(["--bogus"], { token: "t", chatId: "1" })).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 
   it("throws AUTH_REQUIRED when no token is present", async () => {
-    await expect(listenCommand([], { token: undefined, chatId: "1" })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    await expect(listenCommand([], { token: undefined, chatId: "1" })).rejects.toMatchObject({
+      code: "AUTH_REQUIRED",
+    });
   });
 });

@@ -8,7 +8,7 @@ import {
   offsetFilePath,
 } from "../config.js";
 import { hasFlag, parseLimitFlag, parseTimeoutFlag, takeBoolFlag, takeFlag } from "../args.js";
-import { requireToken, type TgContext } from "../context.js";
+import { rejectUnknownFlags, requireToken, type TgContext } from "../context.js";
 import { loadAllowList } from "../access.js";
 import { readOffset } from "../offset.js";
 import {
@@ -44,6 +44,11 @@ function formatBatch(result: DrainResult, json: boolean): string {
 
 export async function listenCommand(args: string[], ctx: TgContext): Promise<string> {
   if (args[0] === "--help") return LISTEN_HELP;
+  rejectUnknownFlags(
+    args,
+    ["--limit", "--timeout", "--json", "--inbox", "--offset-file", "--no-download"],
+    "listen",
+  );
   const apiCtx = requireToken(ctx);
 
   const json = hasFlag(args, "--json");
@@ -78,13 +83,7 @@ export async function listenCommand(args: string[], ctx: TgContext): Promise<str
     const emit = (result: DrainResult): void => {
       process.stdout.write(`${formatBatch(result, json)}\n`);
     };
-    const summary = await listenUpdates(
-      apiCtx,
-      opts,
-      emit,
-      () => stopping,
-      stop.signal,
-    );
+    const summary = await listenUpdates(apiCtx, opts, emit, () => stopping, stop.signal);
     const out = {
       listen: "stopped",
       batches: summary.batches,

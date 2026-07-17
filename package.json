@@ -27,12 +27,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/bin/tg-axi.js",
     "build:skill": "node -e \"import('./dist/src/skill.js').then(m=>{const fs=require('fs');fs.mkdirSync('skills/tg-axi',{recursive:true});fs.writeFileSync('skills/tg-axi/SKILL.md',m.createSkillMarkdown()+'\\n');console.log('wrote skills/tg-axi/SKILL.md');})\"",
     "dev": "tsx bin/tg-axi.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:check": "pnpm run build:skill && git diff --exit-code -- skills/"
   },
   "license": "MIT",
   "packageManager": "pnpm@11.9.0",
@@ -48,6 +51,7 @@
     "@types/node": "^22.0.0",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
+    "prettier": "^3.3.0",
     "tsx": "^4.0.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.64.0",

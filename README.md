@@ -9,6 +9,7 @@ echo -n "alert body" | tg-axi send --stdin   # deliver an alert (the daemon path
 tg-axi send --text-file ./digest.txt --title "wedge alarm" --priority high
 tg-axi receive --json --timeout 30           # drain pending messages (one-shot)
 tg-axi listen                                 # continuous long-poll receive loop
+tg-axi setup hooks                           # install Claude Code / Codex / OpenCode session hooks
 ```
 
 ## Why
@@ -28,16 +29,17 @@ Requires a Telegram bot token in `~/.claude/channels/telegram/.env` (the `TELEGR
 ## Commands
 
 ```
-(none)=session, send, status, receive, listen
+(none)=session, send, status, receive, listen, setup
 ```
 
-| Command | Flags | Notes |
-| --- | --- | --- |
-| `send` | `--chat`, `--title`, `--priority high\|low`, `--text-file <path>`, `--stdin` | chunk-split at 4096; 429 retry; exactly one of `--text-file`/`--stdin` required |
-| `status` | `--chat` | getMe + getChat health check |
-| `receive` | `--limit <1-100>`, `--timeout <0-50s>`, `--json`, `--drop-pending-webhook`, `--inbox <dir>`, `--no-download` | one-shot drain; persist offset; normalize + download every message type |
-| `listen` | `--limit`, `--timeout`, `--inbox`, `--no-download`, `--json` | continuous long-poll loop; clean SIGINT/SIGTERM shutdown |
-| `(none)` | `--chat` | session digest (bot, token-present, default chat, reachable) |
+| Command       | Flags                                                                                                                                | Notes                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `send`        | `--chat`, `--title`, `--priority high\|low`, `--text-file <path>`, `--stdin`                                                         | chunk-split at 4096; 429 retry; exactly one of `--text-file`/`--stdin` required |
+| `status`      | `--chat`                                                                                                                             | getMe + getChat health check                                                    |
+| `receive`     | `--limit <1-100>`, `--timeout <0-50s>`, `--json`, `--drop-pending-webhook`, `--inbox <dir>`, `--offset-file <path>`, `--no-download` | one-shot drain; persist offset; normalize + download every message type         |
+| `listen`      | `--limit`, `--timeout`, `--inbox`, `--offset-file <path>`, `--no-download`, `--json`                                                 | continuous long-poll loop; clean SIGINT/SIGTERM shutdown                        |
+| `setup hooks` | —                                                                                                                                    | install/repair Claude Code, Codex, OpenCode `SessionStart` hooks                |
+| `(none)`      | `--chat`                                                                                                                             | session digest (bot, token-present, default chat, reachable)                    |
 
 Plus the SDK built-in `update` / `update --check`.
 
@@ -69,7 +71,10 @@ pnpm install
 pnpm build            # tsc -> dist/
 pnpm test             # vitest (unit + in-process integration; fully offline)
 pnpm lint             # eslint --max-warnings=0
+pnpm format           # prettier --write .
+pnpm format:check     # prettier --check .
 pnpm build:skill      # regenerate skills/tg-axi/SKILL.md from source
+pnpm docs:check       # build:skill + git diff --exit-code -- skills/ (generated-skill staleness guard)
 pnpm dev <args>       # run via tsx without building
 ```
 
@@ -91,7 +96,7 @@ src/offset.ts          atomic last-acked update_id store (readOffset/writeOffset
 src/access.ts          allowlist load (access.json > TG_ALLOW_FROM > default) + isAllowed
 src/receive.ts         inbound core: normalizeUpdate (all message types) + drainUpdates + listenUpdates + media download
 src/skill.ts           createSkillMarkdown()
-src/commands/*.ts      home, send, status, receive, listen
+src/commands/*.ts      home, send, status, receive, listen, setup
 skills/tg-axi/SKILL.md shipped skill file for agent harness auto-loading
 ```
 

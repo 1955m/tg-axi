@@ -31,46 +31,34 @@ export function mapTgApiError(
     );
   }
   if (code === 401) {
-    return new AxiError(
-      "Telegram rejected the bot token (401 Unauthorized)",
-      "AUTH_REQUIRED",
-      [
-        "Set TELEGRAM_BOT_TOKEN in the environment or ~/.claude/channels/telegram/.env",
-        "Run `tg-axi status` to verify the token",
-      ],
-    );
+    return new AxiError("Telegram rejected the bot token (401 Unauthorized)", "AUTH_REQUIRED", [
+      "Set TELEGRAM_BOT_TOKEN in the environment or ~/.claude/channels/telegram/.env",
+      "Run `tg-axi status` to verify the token",
+    ]);
   }
   if (code === 403) {
     if (/not enough rights|forbidden/i.test(desc) && /chat/i.test(desc)) {
-      return new AxiError(
-        `Telegram chat not reachable: ${desc}`,
-        "FORBIDDEN",
-        ["Start a conversation with the bot first, then pass --chat <id>"],
-      );
+      return new AxiError(`Telegram chat not reachable: ${desc}`, "FORBIDDEN", [
+        "Start a conversation with the bot first, then pass --chat <id>",
+      ]);
     }
     if (/bot was blocked by the user/i.test(desc)) {
-      return new AxiError(
-        "Telegram chat is blocked — the recipient stopped the bot",
-        "FORBIDDEN",
-        ["Have the recipient unblock the bot, then retry"],
-      );
+      return new AxiError("Telegram chat is blocked — the recipient stopped the bot", "FORBIDDEN", [
+        "Have the recipient unblock the bot, then retry",
+      ]);
     }
     return new AxiError(`Telegram forbidden (403): ${desc}`, "FORBIDDEN");
   }
   if (code === 400) {
     if (/chat not found|chat_id/i.test(desc)) {
-      return new AxiError(
-        `Telegram chat not found: ${desc}`,
-        "NOT_FOUND",
-        ["Pass --chat <id> with a valid numeric chat id"],
-      );
+      return new AxiError(`Telegram chat not found: ${desc}`, "NOT_FOUND", [
+        "Pass --chat <id> with a valid numeric chat id",
+      ]);
     }
     if (/empty\b/i.test(desc)) {
-      return new AxiError(
-        `Telegram rejected an empty message: ${desc}`,
-        "VALIDATION_ERROR",
-        ["Provide non-empty text via --stdin or --text-file"],
-      );
+      return new AxiError(`Telegram rejected an empty message: ${desc}`, "VALIDATION_ERROR", [
+        "Provide non-empty text via --stdin or --text-file",
+      ]);
     }
     return new AxiError(`Telegram bad request (400): ${desc}`, "VALIDATION_ERROR");
   }
@@ -86,11 +74,9 @@ export function mapTgApiError(
     ]);
   }
   if (code >= 500) {
-    return new AxiError(
-      `Telegram server error (${code}): ${desc}`,
-      "UNKNOWN",
-      ["Retry later — the Telegram API is temporarily unavailable"],
-    );
+    return new AxiError(`Telegram server error (${code}): ${desc}`, "UNKNOWN", [
+      "Retry later — the Telegram API is temporarily unavailable",
+    ]);
   }
   return new AxiError(`Telegram API error${code ? ` (${code})` : ""}: ${desc}`, "UNKNOWN");
 }

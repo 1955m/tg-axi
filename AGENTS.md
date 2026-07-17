@@ -6,10 +6,21 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 ## Build / test / lint
 
-- `pnpm install` then local bins (no workspace gating from this dir): `node_modules/.bin/tsc -p tsconfig.json`, `node_modules/.bin/vitest run`, `node_modules/.bin/eslint . --max-warnings=0`.
+- `pnpm install` then local bins (no workspace gating from this dir): `node_modules/.bin/tsc -p tsconfig.json`, `node_modules/.bin/vitest run`, `node_modules/.bin/eslint . --max-warnings=0`, `node_modules/.bin/prettier --check .`.
 - `tsc` is `strict` + `noUnusedLocals`/`noUnusedParameters` — every imported symbol must be referenced by name; re-exporting a symbol just to "use" an import is an anti-pattern (import from each symbol's home module instead).
 - TS `module: node16` → relative imports MUST use the `.js` extension (e.g. `./context.js`) even for `.ts` files.
 - Tests are colocated `*.test.ts`, fully offline: they stub `globalThis.fetch` (never the network) and point `TG_TOKEN_FILE` at a nonexistent path so the real `~/.claude/channels/telegram/.env` token is never read.
+- CI gate (`.github/workflows/ci.yml`) order on Node 24 mirrors kunchenguid/axi CONTRIBUTING: `pnpm install --frozen-lockfile` → `format:check` → `lint` → `build` → `test` → `build:skill` → `git diff --exit-code -- skills/`. The last two steps are the generated-skill staleness guard (AXI P7).
+- `skills/tg-axi/SKILL.md` is GENERATED from `src/skill.ts` (`createSkillMarkdown()`); never hand-edit it. After editing `skill.ts` or `cli.ts` TOP_HELP/DESCRIPTION, run `pnpm run build:skill` (or `pnpm run docs:check`) and commit the regenerated SKILL.md, or the `git diff --exit-code -- skills/` step fails.
+
+## Release
+
+- release-please (`release-please-config.json` + `.release-please-manifest.json` + `.github/workflows/release-please.yml`) drives versioned releases + `CHANGELOG.md` from conventional-commit messages (`feat:`/`fix:`/`chore:`). The manifest pins the root version (currently `0.1.0`); release-please opens a release PR on push to `main` that bumps `package.json` + the manifest. `package.json` stays `private: true` (npm publishing is a separate captain-gated decision), so release-please only cuts tags + changelogs.
+
+## AXI principle compliance
+
+- **P6 (fail loud on unknown flags):** `rejectUnknownFlags(args, known, commandPath)` in `context.ts` runs at the top of each command (after the `--help` short-circuit, before any dependency call like `requireToken`). An unrecognized `--flag` throws `VALIDATION_ERROR` naming the flag + listing the command's valid flags; `--chat`/`--help` are always-allowed globals. Each command declares its own known-flag set; `--json` is per-command (receive/listen only), not global.
+- **P7 (ambient context):** `tg-axi setup hooks` (`commands/setup.ts`) calls the SDK's `installSessionStartHooks()` to install Claude Code / Codex / OpenCode `SessionStart` hooks (idempotent, explicit opt-in only — never run from an ordinary command). The generated SKILL.md is the secondary discovery path; the staleness gate above keeps it in sync.
 
 ## SDK contract (axi-sdk-js)
 

@@ -1,12 +1,7 @@
 import { encode } from "@toon-format/toon";
 import { tgRequest, type TgRequestContext } from "../tg.js";
-import {
-  field,
-  renderDetail,
-  renderHelp,
-  renderOutput,
-} from "../toon.js";
-import { requireToken, type TgContext } from "../context.js";
+import { field, renderDetail, renderHelp, renderOutput } from "../toon.js";
+import { rejectUnknownFlags, requireToken, type TgContext } from "../context.js";
 
 export const STATUS_HELP = `usage: tg-axi status
 Run a getMe/getChat health check against the Telegram Bot API.
@@ -56,6 +51,7 @@ const chatSchema = [
 /** getMe + getChat health check. Throws AUTH_REQUIRED if no token is loadable. */
 export async function statusCommand(args: string[], ctx: TgContext): Promise<string> {
   if (args[0] === "--help") return STATUS_HELP;
+  rejectUnknownFlags(args, [], "status");
   const apiCtx: TgRequestContext = requireToken(ctx);
   const me = await tgRequest<TgBot>("getMe", {}, apiCtx);
   let chat: TgChat | null = null;
@@ -65,9 +61,7 @@ export async function statusCommand(args: string[], ctx: TgContext): Promise<str
   } catch (error) {
     chatError = error instanceof Error ? error.message : String(error);
   }
-  const blocks: (string | undefined)[] = [
-    renderDetail("bot", me, botSchema as never),
-  ];
+  const blocks: (string | undefined)[] = [renderDetail("bot", me, botSchema as never)];
   if (chat) {
     blocks.push(renderDetail("chat", chat, chatSchema as never));
   } else {

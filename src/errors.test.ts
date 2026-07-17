@@ -28,7 +28,11 @@ describe("mapTgApiError", () => {
   });
 
   it("maps 403 chat-rights to FORBIDDEN with chat hint", () => {
-    const err = mapTgApiError(403, "Forbidden: not enough rights to send text messages to the chat", {});
+    const err = mapTgApiError(
+      403,
+      "Forbidden: not enough rights to send text messages to the chat",
+      {},
+    );
     expect(err.code).toBe("FORBIDDEN");
     expect(err.suggestions.some((s) => s.includes("--chat"))).toBe(true);
   });

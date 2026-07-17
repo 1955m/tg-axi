@@ -49,10 +49,7 @@ function linkAbort(controller: AbortController, signal?: AbortSignal): () => voi
 }
 
 /** Compute the delay before a 429 retry. Honors Telegram retry_after (capped). */
-export function computeRetryDelay(
-  retryAfterSeconds: number | undefined,
-  attempt: number,
-): number {
+export function computeRetryDelay(retryAfterSeconds: number | undefined, attempt: number): number {
   if (retryAfterSeconds && retryAfterSeconds > 0) {
     return Math.min(retryAfterSeconds, MAX_RETRY_WAIT_S) * 1000;
   }
@@ -79,11 +76,9 @@ export function chunkMessage(text: string, limit: number = TG_TEXT_LIMIT): strin
 
 function toFetchError(error: unknown, timeoutMs: number): AxiError {
   if (error instanceof Error && (/abort/i.test(error.name) || error.name === "TimeoutError")) {
-    return new AxiError(
-      `Telegram API request timed out after ${timeoutMs}ms`,
-      "TIMEOUT",
-      ["Retry; the Telegram API was too slow to respond"],
-    );
+    return new AxiError(`Telegram API request timed out after ${timeoutMs}ms`, "TIMEOUT", [
+      "Retry; the Telegram API was too slow to respond",
+    ]);
   }
   return new AxiError(
     `Telegram API request failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -148,8 +143,7 @@ export async function tgRequest<T>(
     const { status, parsed } = await tgFetch<T>(url, body, timeoutMs, opts.signal);
     if (parsed && parsed.ok) return parsed.result as T;
     const errCode = parsed?.error_code ?? status;
-    const errDesc =
-      parsed?.description ?? (parsed ? "" : `non-JSON response (HTTP ${status})`);
+    const errDesc = parsed?.description ?? (parsed ? "" : `non-JSON response (HTTP ${status})`);
     const error = mapTgApiError(errCode, errDesc, parsed?.parameters);
     if (error.code === "RATE_LIMITED" && attempt <= maxRetries) {
       await sleep(computeRetryDelay(parsed?.parameters?.retry_after, attempt));
@@ -255,9 +249,15 @@ export interface TgMessage {
   video_note?: TgMediaBase;
   document?: TgMediaBase;
   animation?: TgMediaBase;
-  sticker?: TgMediaBase & { emoji?: string; set_name?: string; is_animated?: boolean; is_video?: boolean; type?: string };
-  location?: { longitude: number; latitude: number; };
-  contact?: { phone_number: string; first_name?: string; last_name?: string; user_id?: number; };
+  sticker?: TgMediaBase & {
+    emoji?: string;
+    set_name?: string;
+    is_animated?: boolean;
+    is_video?: boolean;
+    type?: string;
+  };
+  location?: { longitude: number; latitude: number };
+  contact?: { phone_number: string; first_name?: string; last_name?: string; user_id?: number };
   [key: string]: unknown;
 }
 
@@ -294,8 +294,7 @@ export async function getUpdates(
   if (params.offset !== undefined) body["offset"] = params.offset;
   if (params.limit !== undefined) body["limit"] = params.limit;
   if (params.timeout !== undefined) body["timeout"] = params.timeout;
-  const timeoutMs =
-    opts.timeoutMs ?? (longPoll > 0 ? (longPoll + 10) * 1000 : DEFAULT_TIMEOUT_MS);
+  const timeoutMs = opts.timeoutMs ?? (longPoll > 0 ? (longPoll + 10) * 1000 : DEFAULT_TIMEOUT_MS);
   return tgRequest<TgUpdate[]>("getUpdates", body, ctx, { ...opts, timeoutMs });
 }
 

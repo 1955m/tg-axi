@@ -10,8 +10,7 @@ interface MockResponse {
 }
 
 type FetchSpec =
-  | MockResponse
-  | ((url: string, init: RequestInit) => MockResponse | Promise<MockResponse>);
+  MockResponse | ((url: string, init: RequestInit) => MockResponse | Promise<MockResponse>);
 
 function makeResponse(spec: MockResponse): Response {
   return {
@@ -32,7 +31,11 @@ function ok(body: unknown, status = 200): MockResponse {
   return { status, body: JSON.stringify({ ok: true, result: body }) };
 }
 
-function fail(code: number, description: string, parameters?: Record<string, unknown>): MockResponse {
+function fail(
+  code: number,
+  description: string,
+  parameters?: Record<string, unknown>,
+): MockResponse {
   return {
     status: code,
     body: JSON.stringify({ ok: false, error_code: code, description, parameters }),
@@ -112,7 +115,9 @@ describe("tgRequest", () => {
     let calls = 0;
     const spec = (): MockResponse => {
       calls++;
-      return calls === 1 ? fail(429, "Too Many Requests", { retry_after: 1 }) : ok({ message_id: 7 });
+      return calls === 1
+        ? fail(429, "Too Many Requests", { retry_after: 1 })
+        : ok({ message_id: 7 });
     };
     globalThis.fetch = mockFetch(spec);
     try {
@@ -155,7 +160,9 @@ describe("tgRequest", () => {
     };
     globalThis.fetch = mockFetch(spec);
     try {
-      await expect(tgRequest("getMe", {}, CTX, { sleep: async () => undefined })).rejects.toMatchObject({
+      await expect(
+        tgRequest("getMe", {}, CTX, { sleep: async () => undefined }),
+      ).rejects.toMatchObject({
         code: "AUTH_REQUIRED",
       });
       expect(calls).toBe(1);
@@ -187,9 +194,9 @@ describe("tgRequest", () => {
       });
     }) as unknown as typeof fetch;
     try {
-      await expect(
-        tgRequest("getMe", {}, CTX, { timeoutMs: 50 }),
-      ).rejects.toMatchObject({ code: "TIMEOUT" });
+      await expect(tgRequest("getMe", {}, CTX, { timeoutMs: 50 })).rejects.toMatchObject({
+        code: "TIMEOUT",
+      });
     } finally {
       restoreFetch();
     }

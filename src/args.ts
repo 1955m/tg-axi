@@ -103,11 +103,9 @@ export function parseLimitFlag(
   if (raw === undefined) return undefined;
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 1 || n > maxLimit) {
-    throw new AxiError(
-      `--limit must be 1-${maxLimit}, got: ${raw}`,
-      "VALIDATION_ERROR",
-      [`Run \`tg-axi ${commandName} --limit ${defaultLimit}\``],
-    );
+    throw new AxiError(`--limit must be 1-${maxLimit}, got: ${raw}`, "VALIDATION_ERROR", [
+      `Run \`tg-axi ${commandName} --limit ${defaultLimit}\``,
+    ]);
   }
   return n;
 }

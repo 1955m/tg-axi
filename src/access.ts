@@ -1,9 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import {
-  accessFilePath,
-  ALLOW_FROM_ENV,
-  DEFAULT_ALLOW_FROM,
-} from "./config.js";
+import { accessFilePath, ALLOW_FROM_ENV, DEFAULT_ALLOW_FROM } from "./config.js";
 
 /**
  * Receive-side allowlist. Telegram lets any chat that has started the bot send

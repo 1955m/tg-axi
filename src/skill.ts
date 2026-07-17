@@ -10,13 +10,7 @@ export const SKILL_DESCRIPTION =
 
 export const SKILL_AUTHOR = "AXI Suite";
 
-export const HERMES_TAGS = [
-  "telegram",
-  "alerts",
-  "notifications",
-  "messaging",
-  "receive",
-];
+export const HERMES_TAGS = ["telegram", "alerts", "notifications", "messaging", "receive"];
 
 export const HERMES_CATEGORY = "comms";
 
@@ -76,6 +70,9 @@ Use tg-axi whenever a task needs to control a Telegram bot channel: deliver an o
 10. If a 409 conflict occurs (another poller or an active webhook blocks getUpdates), run \`npx -y tg-axi receive --drop-pending-webhook\` (calls deleteWebhook) then drain. This is the only way tg-axi removes a webhook - it never deletes one implicitly.
 11. The allowlist lives in \`~/.claude/channels/telegram/access.json\` (\`{ "allowFrom": ["<chat id>", ...] }\`); messages from non-allowed senders are recorded as type="rejected" and never acted on (no media download). Default is the default chat only; access is never widened silently.
 12. Every response ends with contextual next-step hints under \`help:\` - follow them.
+
+### Session hooks (ambient context)
+13. Install SessionStart hooks so every agent session boots with the tg-axi session digest: \`npx -y tg-axi setup hooks\` (installs Claude Code, Codex, and OpenCode ambient context; idempotent, explicit opt-in only).
 
 ## Commands
 

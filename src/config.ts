@@ -18,8 +18,7 @@ export const TOKEN_ENV = "TELEGRAM_BOT_TOKEN";
 export const TOKEN_FILE_ENV = "TG_TOKEN_FILE";
 
 /** Default on-disk location of the bot token (never committed to this repo). */
-export const DEFAULT_TOKEN_FILE = () =>
-  join(homedir(), ".claude", "channels", "telegram", ".env");
+export const DEFAULT_TOKEN_FILE = () => join(homedir(), ".claude", "channels", "telegram", ".env");
 
 /** Resolve the token file path: TG_TOKEN_FILE env > default ~/.claude path. */
 export function tokenFilePath(): string {
@@ -48,8 +47,7 @@ export function offsetFilePath(): string {
 export const INBOX_DIR_ENV = "TG_INBOX_DIR";
 
 /** Default inbox directory for downloaded Telegram media files. */
-export const DEFAULT_INBOX_DIR = () =>
-  join(homedir(), ".claude", "channels", "telegram", "inbox");
+export const DEFAULT_INBOX_DIR = () => join(homedir(), ".claude", "channels", "telegram", "inbox");
 
 /** Resolve the inbox directory: TG_INBOX_DIR env > default ~/.claude path. */
 export function inboxDir(): string {
