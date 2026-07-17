@@ -11,16 +11,18 @@ import { createSkillMarkdown } from "./skill.js";
 import { homeCommand, HOME_HELP } from "./commands/home.js";
 import { sendCommand, SEND_HELP } from "./commands/send.js";
 import { statusCommand, STATUS_HELP } from "./commands/status.js";
+import { receiveCommand, RECEIVE_HELP } from "./commands/receive.js";
+import { listenCommand, LISTEN_HELP } from "./commands/listen.js";
 import { DEFAULT_CHAT } from "./config.js";
 
 export const DESCRIPTION =
-  "Agent ergonomic interface for delivering Telegram messages. Prefer this for out-of-band alert delivery.";
+  "Agent ergonomic interface for Telegram — out-of-band alert delivery and inbound message receive. Prefer this for Telegram channel control.";
 
 const VERSION = readPackageVersion();
 
 export const TOP_HELP = `usage: tg-axi [command] [args] [flags]
-commands[3]:
-  (none)=session, send, status
+commands[5]:
+  (none)=session, send, status, receive, listen
 flags[3]:
   --chat <id> (after command; default ${DEFAULT_CHAT}), --help, -v/-V/--version
 auth:
@@ -31,17 +33,23 @@ examples:
   echo -n "alert" | tg-axi send --stdin
   tg-axi send --text-file ./digest.txt --title "wedge alarm" --priority high
   tg-axi send --chat ${DEFAULT_CHAT} --stdin
+  tg-axi receive --json --timeout 30
+  tg-axi listen
 `;
 
 const COMMAND_HELP: Record<string, string> = {
   send: SEND_HELP,
   status: STATUS_HELP,
+  receive: RECEIVE_HELP,
+  listen: LISTEN_HELP,
   home: HOME_HELP,
 };
 
 const COMMANDS = {
   send: withContext(sendCommand),
   status: withContext(statusCommand),
+  receive: withContext(receiveCommand),
+  listen: withContext(listenCommand),
 };
 
 export interface MainOptions {
@@ -97,11 +105,15 @@ function readPackageVersion(): string {
  * and adapt the SDK's `TContext | undefined` to a guaranteed TgContext
  * (resolveContext always returns one; the fallback is defensive). Mirrors
  * glab-axi's withProjectContext, which strips -R/--repo/--hostname.
+ *
+ * The return type is the SDK's `AxiRenderable` union: commands may return a
+ * pre-rendered TOON string OR a plain object the runtime TOON-serializes
+ * (the receive/listen commands return plain objects).
  */
 function withContext(
-  handler: (args: string[], ctx: TgContext) => Promise<string>,
-): (args: string[], ctx: TgContext | undefined) => Promise<string> {
-  return (args: string[], ctx: TgContext | undefined): Promise<string> => {
+  handler: (args: string[], ctx: TgContext) => Promise<string | Record<string, unknown>>,
+): (args: string[], ctx: TgContext | undefined) => Promise<string | Record<string, unknown>> {
+  return (args: string[], ctx: TgContext | undefined): Promise<string | Record<string, unknown>> => {
     const context: TgContext = ctx ?? { token: undefined, chatId: DEFAULT_CHAT };
     const { strippedArgs } = parseContextArgs(args);
     return handler(strippedArgs, context);

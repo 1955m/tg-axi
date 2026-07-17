@@ -26,6 +26,66 @@ export function tokenFilePath(): string {
   return process.env[TOKEN_FILE_ENV] ?? DEFAULT_TOKEN_FILE();
 }
 
+// ── receive: offset store / inbox / allowlist ───────────────────────────────
+// These reuse the same ~/.claude/channels/telegram/ dir the token lives in, so a
+// single channel config dir holds the token, the last-acked offset, the inbox of
+// downloaded media, and the access allowlist. Each is overridable via env for
+// tests and local installs, and never commits the token.
+
+/** Environment variable overriding the offset store location (for tests/local). */
+export const OFFSET_FILE_ENV = "TG_OFFSET_FILE";
+
+/** Default on-disk location of the last-acked Telegram update_id. */
+export const DEFAULT_OFFSET_FILE = () =>
+  join(homedir(), ".claude", "channels", "telegram", "offset");
+
+/** Resolve the offset store path: TG_OFFSET_FILE env > default ~/.claude path. */
+export function offsetFilePath(): string {
+  return process.env[OFFSET_FILE_ENV] ?? DEFAULT_OFFSET_FILE();
+}
+
+/** Environment variable overriding the inbox directory (for tests/local). */
+export const INBOX_DIR_ENV = "TG_INBOX_DIR";
+
+/** Default inbox directory for downloaded Telegram media files. */
+export const DEFAULT_INBOX_DIR = () =>
+  join(homedir(), ".claude", "channels", "telegram", "inbox");
+
+/** Resolve the inbox directory: TG_INBOX_DIR env > default ~/.claude path. */
+export function inboxDir(): string {
+  return process.env[INBOX_DIR_ENV] ?? DEFAULT_INBOX_DIR();
+}
+
+/** Environment variable overriding the access allowlist file (for tests/local). */
+export const ACCESS_FILE_ENV = "TG_ACCESS_FILE";
+
+/** Default on-disk location of the access allowlist (JSON { allowFrom: [...] }). */
+export const DEFAULT_ACCESS_FILE = () =>
+  join(homedir(), ".claude", "channels", "telegram", "access.json");
+
+/** Resolve the access allowlist path: TG_ACCESS_FILE env > default ~/.claude path. */
+export function accessFilePath(): string {
+  return process.env[ACCESS_FILE_ENV] ?? DEFAULT_ACCESS_FILE();
+}
+
+/** Environment variable holding a comma-separated allowlist override. */
+export const ALLOW_FROM_ENV = "TG_ALLOW_FROM";
+
+/** Default allowlist when no access.json and no TG_ALLOW_FROM env: just DEFAULT_CHAT. */
+export const DEFAULT_ALLOW_FROM = [DEFAULT_CHAT];
+
+/** getUpdates limit bounds (Telegram permits 1-100 per call). */
+export const MAX_UPDATES_LIMIT = 100;
+export const DEFAULT_UPDATES_LIMIT = 100;
+
+/** getUpdates long-poll timeout bounds in seconds (Telegram permits 0-50). */
+export const MAX_LONG_POLL_TIMEOUT = 50;
+export const DEFAULT_RECEIVE_TIMEOUT = 0;
+export const DEFAULT_LISTEN_TIMEOUT = 30;
+
+/** Per-file download timeout (getFile serves files up to 20MB). */
+export const DOWNLOAD_TIMEOUT_MS = 60_000;
+
 /**
  * Load the Telegram bot token at runtime.
  * Priority: TELEGRAM_BOT_TOKEN env var > the .env file at tokenFilePath().

@@ -91,3 +91,43 @@ export function takeNumber(args: string[], label: string): number {
   args.splice(args.indexOf(raw), 1);
   return Number(raw);
 }
+
+/** Parse + validate `--limit <1-max>`, shared by receive/listen. */
+export function parseLimitFlag(
+  args: string[],
+  commandName: string,
+  defaultLimit: number,
+  maxLimit: number,
+): number | undefined {
+  const raw = takeFlag(args, "--limit");
+  if (raw === undefined) return undefined;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1 || n > maxLimit) {
+    throw new AxiError(
+      `--limit must be 1-${maxLimit}, got: ${raw}`,
+      "VALIDATION_ERROR",
+      [`Run \`tg-axi ${commandName} --limit ${defaultLimit}\``],
+    );
+  }
+  return n;
+}
+
+/** Parse + validate `--timeout <0-max>s` (long-poll), shared by receive/listen. */
+export function parseTimeoutFlag(
+  args: string[],
+  commandName: string,
+  defaultTimeout: number,
+  maxTimeout: number,
+): number | undefined {
+  const raw = takeFlag(args, "--timeout");
+  if (raw === undefined) return undefined;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0 || n > maxTimeout) {
+    throw new AxiError(
+      `--timeout must be 0-${maxTimeout} seconds, got: ${raw}`,
+      "VALIDATION_ERROR",
+      [`Run \`tg-axi ${commandName} --timeout ${defaultTimeout}\``],
+    );
+  }
+  return n;
+}

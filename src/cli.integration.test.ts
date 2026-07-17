@@ -54,9 +54,18 @@ describe("main (in-process)", () => {
     await main({ argv: ["--help"], stdout: out.stdout });
     const text = out.chunks.join("");
     expect(text).toContain("usage:");
-    expect(text).toContain("commands[3]:");
+    expect(text).toContain("commands[5]:");
     expect(text).toContain("--chat");
     expect(text).toContain("built-in");
+  });
+
+  it("lists receive/listen in the top-level commands and examples", async () => {
+    const out = capture();
+    await main({ argv: ["--help"], stdout: out.stdout });
+    const text = out.chunks.join("");
+    expect(text).toContain("receive");
+    expect(text).toContain("listen");
+    expect(text).toContain("tg-axi receive --json --timeout 30");
   });
 
   it("renders the session digest header (offline, no token)", async () => {
@@ -148,8 +157,14 @@ describe("createSkillMarkdown", () => {
     const md = createSkillMarkdown();
     expect(md).toContain("---\nname: tg-axi");
     expect(md).toContain("category: comms");
-    expect(md).toContain("commands[3]:");
+    expect(md).toContain("commands[5]:");
     expect(md).toContain("npx -y tg-axi");
+  });
+
+  it("documents receive/listen inbound flow", () => {
+    const md = createSkillMarkdown();
+    expect(md).toContain("receive");
+    expect(md).toContain("listen");
   });
 
   it("documents the token file location", () => {

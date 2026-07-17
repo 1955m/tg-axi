@@ -59,6 +59,14 @@ describe("mapTgApiError", () => {
     expect(err.code).toBe("VALIDATION_ERROR");
   });
 
+  it("maps 409 getUpdates conflict to VALIDATION_ERROR with webhook/poller guidance", () => {
+    const err = mapTgApiError(409, "Conflict: can't get updates while a webhook is active", {});
+    expect(err.code).toBe("VALIDATION_ERROR");
+    expect(err.message).toContain("conflict");
+    expect(err.suggestions.some((s) => s.includes("ONE"))).toBe(true);
+    expect(err.suggestions.some((s) => s.includes("drop-pending-webhook"))).toBe(true);
+  });
+
   it("maps 5xx to UNKNOWN", () => {
     const err = mapTgApiError(500, "Internal Server Error", {});
     expect(err.code).toBe("UNKNOWN");

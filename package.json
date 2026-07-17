@@ -2,7 +2,7 @@
   "name": "tg-axi",
   "version": "0.1.0",
   "private": true,
-  "description": "AXI-compliant Telegram CLI — out-of-band alert delivery for agents, token-efficient TOON output, chunked sends with 429 backoff",
+  "description": "AXI-compliant Telegram CLI — out-of-band alert delivery and inbound message receive for agents, token-efficient TOON output",
   "type": "module",
   "repository": {
     "type": "git",

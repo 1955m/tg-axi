@@ -78,7 +78,12 @@ export function mapTgApiError(
     return new AxiError(`Telegram not found (404): ${desc}`, "NOT_FOUND");
   }
   if (code === 409) {
-    return new AxiError(`Telegram conflict (409): ${desc}`, "VALIDATION_ERROR");
+    // Telegram permits exactly one getUpdates consumer per bot token, and an
+    // active webhook blocks getUpdates entirely. Both surface as 409 Conflict.
+    return new AxiError(`Telegram getUpdates conflict (409): ${desc}`, "VALIDATION_ERROR", [
+      "Only ONE getUpdates consumer may run per bot token — stop any other poller/listen instance",
+      "An active webhook blocks getUpdates — run `tg-axi receive --drop-pending-webhook` to remove it",
+    ]);
   }
   if (code >= 500) {
     return new AxiError(
