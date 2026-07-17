@@ -1,12 +1,12 @@
 {
   "name": "tg-axi",
   "version": "0.1.0",
+  "private": true,
   "description": "AXI-compliant Telegram CLI — out-of-band alert delivery for agents, token-efficient TOON output, chunked sends with 429 backoff",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kunchenguid/axi-tools.git",
-    "directory": "packages/tg-axi"
+    "url": "https://github.com/1955m/tg-axi.git"
   },
   "keywords": [
     "telegram",
@@ -26,9 +26,6 @@
     "README.md",
     "LICENSE"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "build": "tsc",
     "build:skill": "node -e \"import('./dist/src/skill.js').then(m=>{const fs=require('fs');fs.mkdirSync('skills/tg-axi',{recursive:true});fs.writeFileSync('skills/tg-axi/SKILL.md',m.createSkillMarkdown()+'\\n');console.log('wrote skills/tg-axi/SKILL.md');})\"",
@@ -38,6 +35,7 @@
     "lint": "eslint . --max-warnings=0"
   },
   "license": "MIT",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=20"
   },
