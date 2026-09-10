@@ -12,9 +12,9 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
-import lockfile from "proper-lockfile";
 import { AxiError, redactSecrets } from "./errors.js";
 import { tgRequest, type TgRequestContext, type TgRequestOptions } from "./tg.js";
 import { TG_TEXT_LIMIT } from "./config.js";
@@ -405,15 +405,38 @@ function claimPath(dir: string, eventId: string): string {
 }
 
 async function claimDelivery(dir: string, eventId: string): Promise<() => Promise<void>> {
+  if (process.platform !== "linux") {
+    throw new AxiError(
+      "notification delivery requires Linux flock-based locking",
+      "VALIDATION_ERROR",
+    );
+  }
   const path = claimPath(dir, eventId);
-  let release: () => Promise<void>;
-  try {
-    release = await lockfile.lock(path, {
-      realpath: false,
-      stale: 2_000,
-      update: 1_000,
-      retries: 0,
+  const child = spawn("flock", ["-n", path, "-c", "printf locked; cat >/dev/null"], {
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  let acquired = false;
+  const acquiredLock = new Promise<void>((resolve, reject) => {
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (chunk.toString().includes("locked")) {
+        acquired = true;
+        resolve();
+      }
     });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (!acquired) {
+        reject(
+          Object.assign(
+            new Error(code === 1 ? "notification is already claimed" : "flock exited early"),
+            { code: code === 1 ? "ELOCKED" : "ELOCK" },
+          ),
+        );
+      }
+    });
+  });
+  try {
+    await acquiredLock;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -425,9 +448,23 @@ async function claimDelivery(dir: string, eventId: string): Promise<() => Promis
         "VALIDATION_ERROR",
       );
     }
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      throw new AxiError(
+        "notification delivery requires the Linux flock command",
+        "VALIDATION_ERROR",
+      );
+    }
+    child.kill();
     throw new AxiError(`could not claim notification ${eventId}`, "VALIDATION_ERROR");
   }
-  return async (): Promise<void> => release();
+  return async (): Promise<void> => {
+    child.stdin.end();
+    await new Promise<void>((resolve) => child.once("close", () => resolve()));
+  };
 }
 
 function isUncertain(error: unknown): boolean {
@@ -561,17 +598,23 @@ export async function deliverNotification(
       if (!options.retry) throw new NotificationDeliveryError(existing, receiptFile);
     }
 
+    const previousRecord = pathExists(receiptFile) ? readDeliveryRecord(receiptFile) : undefined;
+    const wasUnknown = previousRecord?.delivery === "unknown";
     let record: DeliveryRecord = {
       schema: DELIVERY_RECORD_SCHEMA,
       event_id: event.event_id,
       event_hash: hash,
       chat_id: ctx.chatId,
-      delivery: "pending",
+      delivery: wasUnknown ? "unknown" : "pending",
       confirmed_chunks: 0,
       chunks: 1,
       message_ids: [],
       updated_at: new Date().toISOString(),
     };
+    if (wasUnknown) {
+      record.failure_kind = "uncertain";
+      record.error = previousRecord?.error;
+    }
     persist(receiptFile, record);
     let result: { message_id: number };
     try {
@@ -582,7 +625,7 @@ export async function deliverNotification(
         options,
       );
     } catch (error) {
-      const uncertain = isUncertain(error);
+      const uncertain = wasUnknown || isUncertain(error);
       record = {
         ...record,
         delivery: uncertain ? "unknown" : "failed",
@@ -598,6 +641,8 @@ export async function deliverNotification(
       delivery: "confirmed",
       confirmed_chunks: 1,
       message_ids: [result.message_id],
+      failure_kind: undefined,
+      error: undefined,
       updated_at: new Date().toISOString(),
     };
     try {

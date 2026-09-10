@@ -136,6 +136,30 @@ describe("durable notification delivery", () => {
     expect(receipt).toMatchObject({ delivery: "failed", failure_kind: "definite" });
   });
 
+  it("preserves an unknown receipt after a definitely rejected retry", async () => {
+    const dir = root();
+    globalThis.fetch = (() =>
+      Promise.reject(new Error("connection lost"))) as unknown as typeof fetch;
+
+    await expect(deliverNotification(event, CTX, dir)).rejects.toBeInstanceOf(
+      NotificationDeliveryError,
+    );
+
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        response({ ok: false, error_code: 403, description: "forbidden" }, 403),
+      )) as unknown as typeof fetch;
+
+    await expect(deliverNotification(event, CTX, dir, { retry: true })).rejects.toBeInstanceOf(
+      NotificationDeliveryError,
+    );
+    const receipt = JSON.parse(
+      fs.readFileSync(join(dir, "receipts", `${event.event_id}.json`), "utf8"),
+    ) as Record<string, unknown>;
+    expect(receipt).toMatchObject({ delivery: "unknown", failure_kind: "uncertain" });
+    expect(readDeliverySummary(dir)).toMatchObject({ unknown: 1, failed: 0 });
+  });
+
   it("keeps an acknowledged message distinct from receipt persistence failure", async () => {
     const dir = root();
     globalThis.fetch = (() => Promise.resolve(ok(46))) as unknown as typeof fetch;
@@ -198,35 +222,53 @@ describe("durable notification delivery", () => {
     const dir = root();
     const receipts = join(dir, "receipts");
     fs.mkdirSync(receipts, { recursive: true, mode: 0o700 });
-    const childScript = `import { deliverNotification } from "./src/delivery.ts";
+    const eventFile = join(dir, "event.json");
+    fs.writeFileSync(eventFile, `${JSON.stringify(event)}\n`);
+    const childScript = `import { main } from "./src/cli.ts";
+process.env.TELEGRAM_BOT_TOKEN = process.argv[3];
+process.env.TG_TOKEN_FILE = "/nonexistent/tg-axi-test-token";
+const mode = process.argv[4];
 globalThis.fetch = () => {
-  console.log("sending");
-  return new Promise(() => {});
+  if (mode === "hold") {
+    console.log("sending");
+    return new Promise(() => {});
+  }
+  return Promise.resolve({ status: 200, text: () => Promise.resolve(JSON.stringify({ ok: true, result: { message_id: 47 } })) });
 };
-await deliverNotification(JSON.parse(process.argv[1]), { token: process.argv[3], chatId: "123456789" }, process.argv[2]);`;
+await main({ argv: ["notify", "--event-file", process.argv[1], "--delivery-dir", process.argv[2], "--retry"] });`;
     const child = spawn(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        "--input-type=module",
-        "-e",
-        childScript,
-        JSON.stringify(event),
-        dir,
-        TOKEN,
-      ],
+      ["--import", "tsx", "--input-type=module", "-e", childScript, eventFile, dir, TOKEN, "hold"],
       { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] },
     );
     await once(child.stdout!, "data");
+
+    const competing = spawn(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", childScript, eventFile, dir, TOKEN, "retry"],
+      { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] },
+    );
+    let competingOutput = "";
+    competing.stdout!.on("data", (chunk: Buffer) => {
+      competingOutput += chunk.toString();
+    });
+    await once(competing, "close");
+    expect(competingOutput).toMatch(/already claimed/);
+
     child.kill("SIGKILL");
     await once(child, "exit");
-    await new Promise((resolve) => setTimeout(resolve, 3_500));
 
-    globalThis.fetch = (() => Promise.resolve(ok(47))) as unknown as typeof fetch;
-    await expect(deliverNotification(event, CTX, dir, { retry: true })).resolves.toMatchObject({
-      delivery: "confirmed",
-      message_ids: [47],
+    const retry = spawn(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", childScript, eventFile, dir, TOKEN, "retry"],
+      { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] },
+    );
+    let retryOutput = "";
+    retry.stdout!.on("data", (chunk: Buffer) => {
+      retryOutput += chunk.toString();
     });
+    await once(retry, "close");
+    expect(retryOutput).toMatch(/delivered/);
+    expect(retryOutput).toContain("47");
   });
 });

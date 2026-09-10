@@ -17,6 +17,9 @@ TG_AXI_CHECKOUT="$(pwd)" integrations/firstmate/install-runtime.sh
 install -m 0755 integrations/firstmate/tg-axi-notify.sh /home/ubuntu/firstmate/.local/bin/tg-axi-notify
 ```
 
+The notification path requires Linux `flock` locking; unsupported runtimes
+fail validation without affecting inbound receive or listen.
+
 Keep the package private; do not publish it. The Telegram token remains in the
 runtime location `~/.claude/channels/telegram/.env` as
 `TELEGRAM_BOT_TOKEN=...`, or in the process environment. Never put it in
