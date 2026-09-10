@@ -1,5 +1,5 @@
 import { API_BASE, DOWNLOAD_TIMEOUT_MS, TG_TEXT_LIMIT } from "./config.js";
-import { AxiError, mapTgApiError, type TgErrorParameters } from "./errors.js";
+import { AxiError, mapTgApiError, redactSecrets, type TgErrorParameters } from "./errors.js";
 
 /** Narrow context the HTTP client needs: a resolved token + chat id. */
 export interface TgRequestContext {
@@ -19,18 +19,35 @@ interface TgApiResponse<T> {
 export interface TgRequestOptions {
   timeoutMs?: number;
   maxRetries?: number;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** External signal that aborts the in-flight request (used by `listen` shutdown). */
   signal?: AbortSignal;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 4;
-const MAX_RETRY_WAIT_S = 10;
 const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
-const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const defaultSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const timeout: { current?: ReturnType<typeof setTimeout> } = {};
+    const cleanup = (): void => signal?.removeEventListener("abort", onAbort);
+    const finish = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onAbort = (): void => {
+      if (timeout.current) clearTimeout(timeout.current);
+      cleanup();
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+      reject(error);
+    };
+    timeout.current = setTimeout(finish, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 
 /**
  * Link an external AbortSignal to a request's AbortController so aborting the
@@ -48,10 +65,10 @@ function linkAbort(controller: AbortController, signal?: AbortSignal): () => voi
   return (): void => signal.removeEventListener("abort", onAbort);
 }
 
-/** Compute the delay before a 429 retry. Honors Telegram retry_after (capped). */
+/** Compute the delay before a 429 retry. Honors Telegram's full retry_after. */
 export function computeRetryDelay(retryAfterSeconds: number | undefined, attempt: number): number {
   if (retryAfterSeconds && retryAfterSeconds > 0) {
-    return Math.min(retryAfterSeconds, MAX_RETRY_WAIT_S) * 1000;
+    return retryAfterSeconds * 1000;
   }
   const backoff = BASE_BACKOFF_MS * 2 ** (attempt - 1);
   return Math.min(backoff, MAX_BACKOFF_MS);
@@ -74,14 +91,14 @@ export function chunkMessage(text: string, limit: number = TG_TEXT_LIMIT): strin
   return chunks;
 }
 
-function toFetchError(error: unknown, timeoutMs: number): AxiError {
+function toFetchError(error: unknown, timeoutMs: number, token: string): AxiError {
   if (error instanceof Error && (/abort/i.test(error.name) || error.name === "TimeoutError")) {
     return new AxiError(`Telegram API request timed out after ${timeoutMs}ms`, "TIMEOUT", [
       "Retry; the Telegram API was too slow to respond",
     ]);
   }
   return new AxiError(
-    `Telegram API request failed: ${error instanceof Error ? error.message : String(error)}`,
+    `Telegram API request failed: ${redactSecrets(error instanceof Error ? error.message : String(error), token)}`,
     "NETWORK_ERROR",
     ["Check network/DNS and retry"],
   );
@@ -91,6 +108,7 @@ async function tgFetch<T>(
   url: string,
   body: Record<string, unknown>,
   timeoutMs: number,
+  token: string,
   signal?: AbortSignal,
 ): Promise<{ status: number; parsed: TgApiResponse<T> | null }> {
   const controller = new AbortController();
@@ -105,7 +123,7 @@ async function tgFetch<T>(
       signal: controller.signal,
     });
   } catch (error) {
-    throw toFetchError(error, timeoutMs);
+    throw toFetchError(error, timeoutMs, token);
   } finally {
     clearTimeout(timer);
     unlink();
@@ -140,13 +158,13 @@ export async function tgRequest<T>(
   let attempt = 0;
   for (;;) {
     attempt++;
-    const { status, parsed } = await tgFetch<T>(url, body, timeoutMs, opts.signal);
+    const { status, parsed } = await tgFetch<T>(url, body, timeoutMs, ctx.token, opts.signal);
     if (parsed && parsed.ok) return parsed.result as T;
     const errCode = parsed?.error_code ?? status;
     const errDesc = parsed?.description ?? (parsed ? "" : `non-JSON response (HTTP ${status})`);
     const error = mapTgApiError(errCode, errDesc, parsed?.parameters);
     if (error.code === "RATE_LIMITED" && attempt <= maxRetries) {
-      await sleep(computeRetryDelay(parsed?.parameters?.retry_after, attempt));
+      await sleep(computeRetryDelay(parsed?.parameters?.retry_after, attempt), opts.signal);
       continue;
     }
     throw error;
@@ -341,7 +359,7 @@ export async function downloadTgFile(
   try {
     response = await fetch(url, { signal: controller.signal });
   } catch (error) {
-    throw toFetchError(error, timeoutMs);
+    throw toFetchError(error, timeoutMs, ctx.token);
   } finally {
     clearTimeout(timer);
     unlink();

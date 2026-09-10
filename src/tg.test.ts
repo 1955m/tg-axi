@@ -84,9 +84,9 @@ describe("chunkMessage", () => {
 });
 
 describe("computeRetryDelay", () => {
-  it("honors retry_after seconds (capped)", () => {
+  it("honors the full retry_after seconds", () => {
     expect(computeRetryDelay(5, 1)).toBe(5000);
-    expect(computeRetryDelay(60, 1)).toBe(10_000);
+    expect(computeRetryDelay(60, 1)).toBe(60_000);
   });
 
   it("uses exponential backoff without retry_after", () => {

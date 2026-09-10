@@ -10,16 +10,17 @@ import { statusCommand, STATUS_HELP } from "./commands/status.js";
 import { receiveCommand, RECEIVE_HELP } from "./commands/receive.js";
 import { listenCommand, LISTEN_HELP } from "./commands/listen.js";
 import { setupCommand, SETUP_HELP } from "./commands/setup.js";
+import { notifyCommand, NOTIFY_HELP } from "./commands/notify.js";
 import { DEFAULT_CHAT } from "./config.js";
 
 export const DESCRIPTION =
-  "Agent ergonomic interface for Telegram — out-of-band alert delivery and inbound message receive. Prefer this for Telegram channel control.";
+  "Agent ergonomic interface for Telegram — durable outbound notifications and inbound message receive. Prefer this for Telegram channel control.";
 
 const VERSION = readPackageVersion();
 
 export const TOP_HELP = `usage: tg-axi [command] [args] [flags]
-commands[6]:
-  (none)=session, send, status, receive, listen, setup
+commands[7]:
+  (none)=session, send, notify, status, receive, listen, setup
 flags[3]:
   --chat <id> (after command; default ${DEFAULT_CHAT}), --help, -v/-V/--version
 auth:
@@ -29,6 +30,7 @@ examples:
   tg-axi status
   echo -n "alert" | tg-axi send --stdin
   tg-axi send --text-file ./digest.txt --title "wedge alarm" --priority high
+  tg-axi notify --event-file ./firstmate-event.json
   tg-axi send --chat ${DEFAULT_CHAT} --stdin
   tg-axi receive --json --timeout 30
   tg-axi listen
@@ -41,6 +43,7 @@ const COMMAND_HELP: Record<string, string> = {
   receive: RECEIVE_HELP,
   listen: LISTEN_HELP,
   setup: SETUP_HELP,
+  notify: NOTIFY_HELP,
   home: HOME_HELP,
 };
 
@@ -50,6 +53,7 @@ const COMMANDS = {
   receive: withContext(receiveCommand),
   listen: withContext(listenCommand),
   setup: withContext(setupCommand),
+  notify: withContext(notifyCommand),
 };
 
 export interface MainOptions {

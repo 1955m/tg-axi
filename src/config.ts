@@ -54,6 +54,18 @@ export function inboxDir(): string {
   return process.env[INBOX_DIR_ENV] ?? DEFAULT_INBOX_DIR();
 }
 
+/** Environment variable overriding durable outbound notification records. */
+export const DELIVERY_DIR_ENV = "TG_DELIVERY_DIR";
+
+/** Default private directory for outbound notification events and receipts. */
+export const DEFAULT_DELIVERY_DIR = () =>
+  join(homedir(), ".claude", "channels", "telegram", "delivery");
+
+/** Resolve the outbound notification record directory. */
+export function deliveryDir(): string {
+  return process.env[DELIVERY_DIR_ENV] ?? DEFAULT_DELIVERY_DIR();
+}
+
 /** Environment variable overriding the access allowlist file (for tests/local). */
 export const ACCESS_FILE_ENV = "TG_ACCESS_FILE";
 

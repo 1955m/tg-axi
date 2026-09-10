@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,7 +56,7 @@ describe("main (in-process)", () => {
     await main({ argv: ["--help"], stdout: out.stdout });
     const text = out.chunks.join("");
     expect(text).toContain("usage:");
-    expect(text).toContain("commands[6]:");
+    expect(text).toContain("commands[7]:");
     expect(text).toContain("--chat");
     expect(text).toContain("built-in");
   });
@@ -104,6 +104,19 @@ describe("main (in-process)", () => {
     await main({ argv: ["bogus"], stdout: out.stdout });
     const text = out.chunks.join("");
     expect(text).toContain("Unknown command: bogus");
+  });
+
+  it("reports local notification status without a token or network call", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tg-axi-status-"));
+    try {
+      const out = capture();
+      await main({ argv: ["notify", "status", "--delivery-dir", dir], stdout: out.stdout });
+      const text = out.chunks.join("");
+      expect(text).toContain("events: 0");
+      expect(text).toContain("confirmed: 0");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("prints SKILL.md for --skill", async () => {
@@ -180,7 +193,7 @@ describe("createSkillMarkdown", () => {
     const md = createSkillMarkdown();
     expect(md).toContain("---\nname: tg-axi");
     expect(md).toContain("category: comms");
-    expect(md).toContain("commands[6]:");
+    expect(md).toContain("commands[7]:");
     expect(md).toContain("npx -y tg-axi");
   });
 
