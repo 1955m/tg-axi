@@ -113,7 +113,7 @@ Built on the published [`axi-sdk-js`](https://www.npmjs.com/package/axi-sdk-js) 
 ```
 bin/tg-axi.ts          entrypoint
 src/cli.ts             runAxiCli wiring, TOP_HELP, --skill, context (token+chat) resolution
-src/config.ts          DEFAULT_CHAT, API_BASE, TG_TEXT_LIMIT, runtime token loading + offset/inbox/access path resolvers
+src/config.ts          DEFAULT_CHAT, API_BASE, TG_TEXT_LIMIT, runtime token loading + offset/inbox/access/delivery path resolvers
 src/context.ts         TgContext, --chat resolution, requireToken()
 src/tg.ts              Telegram Bot API client (tgRequest with timeout+429 retry+AbortSignal, sendChunks, chunkMessage, getUpdates, getFile, deleteWebhook, downloadTgFile)
 src/errors.ts          mapTgApiError -> AxiError codes (409 conflict → webhook/poller guidance)
@@ -122,7 +122,8 @@ src/offset.ts          atomic last-acked update_id store (readOffset/writeOffset
 src/access.ts          allowlist load (access.json > TG_ALLOW_FROM > default) + isAllowed
 src/receive.ts         inbound core: normalizeUpdate (all message types) + drainUpdates + listenUpdates + media download
 src/skill.ts           createSkillMarkdown()
-src/commands/*.ts      home, send, status, receive, listen, setup
+src/commands/*.ts      home, send, notify, status, receive, listen, setup
+src/delivery.ts        durable notification event/receipt storage and delivery
 skills/tg-axi/SKILL.md shipped skill file for agent harness auto-loading
 ```
 

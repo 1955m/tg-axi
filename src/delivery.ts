@@ -250,16 +250,20 @@ function atomicWrite(path: string, value: unknown): void {
     }
   } finally {
     if (fd !== undefined) closeSync(fd);
-    try {
-      unlinkSync(temp);
-    } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        (error as NodeJS.ErrnoException).code === "ENOENT"
-      )) {
-        throw error;
-      }
+    removeTemporaryFile(temp);
+  }
+}
+
+function removeTemporaryFile(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch (error) {
+    if (!(
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    )) {
+      throw error;
     }
   }
 }
@@ -285,17 +289,7 @@ function exclusiveWrite(path: string, value: unknown): void {
     }
   } finally {
     if (fd !== undefined) closeSync(fd);
-    try {
-      unlinkSync(temp);
-    } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        (error as NodeJS.ErrnoException).code === "ENOENT"
-      )) {
-        throw error;
-      }
-    }
+    removeTemporaryFile(temp);
   }
 }
 
