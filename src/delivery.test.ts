@@ -129,13 +129,7 @@ describe("durable notification delivery", () => {
     expect(receipt).toMatchObject({ delivery: "failed", failure_kind: "definite" });
   });
 
-  it("records confirmed chunks before a later chunk becomes uncertain", async () => {
-    const dir = root();
-    let calls = 0;
-    globalThis.fetch = (() => {
-      calls++;
-      return calls === 1 ? Promise.resolve(ok(44)) : Promise.reject(new Error("connection closed"));
-    }) as unknown as typeof fetch;
+  it("rejects an event that would exceed the single-message contract", () => {
     const longEvent = {
       ...event,
       event_id: "completion.task-42.long",
@@ -147,12 +141,32 @@ describe("durable notification delivery", () => {
       ],
     };
 
-    await expect(deliverNotification(longEvent, CTX, dir)).rejects.toBeInstanceOf(
-      NotificationDeliveryError,
+    expect(() => validateNotificationEvent(longEvent)).toThrow(/4096/);
+  });
+
+  it("exclusively claims concurrent delivery attempts", async () => {
+    const dir = root();
+    let calls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    globalThis.fetch = (() => {
+      calls++;
+      started();
+      return new Promise<Response>((resolve) => {
+        release = () => resolve(ok(45));
+      });
+    }) as unknown as typeof fetch;
+
+    const first = deliverNotification(event, CTX, dir);
+    await fetchStarted;
+    await expect(deliverNotification(event, CTX, dir, { retry: true })).rejects.toThrow(
+      /already claimed/,
     );
-    const receipt = JSON.parse(
-      readFileSync(join(dir, "receipts", `${longEvent.event_id}.json`), "utf8"),
-    ) as Record<string, unknown>;
-    expect(receipt).toMatchObject({ delivery: "partial", confirmed_chunks: 1 });
+    release();
+    await expect(first).resolves.toMatchObject({ delivery: "confirmed", message_ids: [45] });
+    expect(calls).toBe(1);
   });
 });

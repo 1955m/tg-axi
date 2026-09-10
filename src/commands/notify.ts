@@ -1,5 +1,5 @@
 import { deliveryDir } from "../config.js";
-import { assertNoRemainingArgs, takeBoolFlag, takeFlag } from "../args.js";
+import { assertNoRemainingArgs, hasFlag, takeBoolFlag, takeFlag } from "../args.js";
 import { rejectUnknownFlags, requireToken, type TgContext } from "../context.js";
 import { AxiError } from "../errors.js";
 import {
@@ -56,10 +56,13 @@ export async function notifyCommand(
     `notify${status ? " status" : ""}`,
   );
   const json = takeBoolFlag(args, "--json");
-  const dir = takeFlag(args, "--delivery-dir") ?? deliveryDir();
-  if (dir.startsWith("--")) {
+  const hasDeliveryDir =
+    hasFlag(args, "--delivery-dir") || args.some((arg) => arg.startsWith("--delivery-dir="));
+  const dir = takeFlag(args, "--delivery-dir");
+  if (hasDeliveryDir && (!dir || dir.startsWith("--"))) {
     throw new AxiError("--delivery-dir requires a directory path", "VALIDATION_ERROR");
   }
+  const resolvedDir = dir ?? deliveryDir();
   const eventFile = status ? undefined : takeFlag(args, "--event-file");
   const retry = takeBoolFlag(args, "--retry");
   if (status && (eventFile !== undefined || retry)) {
@@ -69,7 +72,7 @@ export async function notifyCommand(
 
   if (status) {
     const output = {
-      ...readDeliverySummary(dir),
+      ...readDeliverySummary(resolvedDir),
       help: ["Run `tg-axi notify --event-file <path>` at a verified Firstmate outcome"],
     };
     return json ? JSON.stringify(output) : output;
@@ -82,7 +85,7 @@ export async function notifyCommand(
   }
   assertNoRemainingArgs(args, "notify");
   const event = readNotificationEvent(eventFile);
-  const result = await deliverNotification(event, requireToken(ctx), dir, { retry });
+  const result = await deliverNotification(event, requireToken(ctx), resolvedDir, { retry });
   const output = resultOutput(result);
   return json ? JSON.stringify(output) : output;
 }

@@ -24,7 +24,8 @@ This is the out-of-band alert channel for Firstmate's verified outcomes and away
 # The package is private and is not published. Build/install from a validated checkout:
 corepack pnpm install --frozen-lockfile
 corepack pnpm run build
-install -m 0755 dist/bin/tg-axi.js /absolute/path/to/bin/tg-axi
+install -d /home/ubuntu/firstmate/.local/bin
+ln -sfn "$(pwd)/dist/bin/tg-axi.js" /home/ubuntu/firstmate/.local/bin/tg-axi
 # or run on demand from the checkout:
 corepack pnpm dev <command>
 ```
@@ -59,13 +60,13 @@ All output is [TOON](https://www.npmjs.com/package/@toon-format/toon)-encoded: `
 ## Firstmate notifications
 
 Firstmate writes a versioned event JSON only after a verified review-ready,
-completion, progress, or blocker outcome. The event must contain a stable
+completion, or blocker outcome. The event must contain a stable
 `event_id`, a short Traditional Chinese `summary`, and one to three real HTTPS
 links (usually an artifact or PR). Run `tg-axi notify --event-file <path>` or
-the narrow `integrations/firstmate/tg-axi-notify.sh` wrapper. The event and
+the narrow `integrations/firstmate/tg-axi-notify.sh <config> <event>` wrapper. The event and
 receipt are stored before sending under the private `TG_DELIVERY_DIR` location
 (default `~/.claude/channels/telegram/delivery`). A confirmed event never sends
-again on replay. A pending, failed, partial, or unknown receipt requires an
+again on replay. A pending, failed, or unknown receipt requires an
 explicit `--retry`; unknown network outcomes remain non-confirmed.
 
 See [`docs/firstmate-integration.md`](docs/firstmate-integration.md) for the

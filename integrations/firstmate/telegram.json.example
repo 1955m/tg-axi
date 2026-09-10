@@ -1,6 +1,7 @@
 {
   "enabled": true,
-  "binary": "/absolute/path/to/tg-axi",
+  "binary": "/home/ubuntu/firstmate/.local/bin/tg-axi",
   "chat_id": "<private-chat-id>",
+  "token_file": "/home/ubuntu/.claude/channels/telegram/.env",
   "delivery_dir": "/home/ubuntu/firstmate/state/telegram/delivery"
 }

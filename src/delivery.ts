@@ -8,20 +8,21 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { AxiError, redactSecrets } from "./errors.js";
-import { chunkMessage, tgRequest, type TgRequestContext, type TgRequestOptions } from "./tg.js";
+import { tgRequest, type TgRequestContext, type TgRequestOptions } from "./tg.js";
 import { TG_TEXT_LIMIT } from "./config.js";
 
 export const NOTIFICATION_EVENT_SCHEMA = "tg-axi/notification-event/v1";
 export const DELIVERY_RECORD_SCHEMA = "tg-axi/notification-delivery/v1";
 export const DELIVERY_METADATA_SCHEMA = "tg-axi/notification-metadata/v1";
 
-export type NotificationKind = "progress" | "review_ready" | "completion" | "blocker";
-export type DeliveryState = "pending" | "confirmed" | "failed" | "unknown" | "partial";
+export type NotificationKind = "review_ready" | "completion" | "blocker";
+export type DeliveryState = "pending" | "confirmed" | "failed" | "unknown";
 
 export interface NotificationLink {
   label: string;
@@ -38,7 +39,6 @@ export interface NotificationEvent {
   occurred_at: string;
   summary: string;
   links: NotificationLink[];
-  priority?: "high" | "low";
 }
 
 export interface DeliveryRecord {
@@ -74,12 +74,10 @@ export interface DeliverySummary {
   pending: number;
   failed: number;
   unknown: number;
-  partial: number;
   latest_updated_at?: string;
 }
 
 const KIND_LABELS: Record<NotificationKind, string> = {
-  progress: "進度",
   review_ready: "可供審閱",
   completion: "完成",
   blocker: "阻礙",
@@ -142,10 +140,7 @@ export function validateNotificationEvent(value: unknown): NotificationEvent {
     typeof value.kind !== "string" ||
     !Object.prototype.hasOwnProperty.call(KIND_LABELS, value.kind)
   ) {
-    throw new AxiError(
-      "kind must be progress, review_ready, completion, or blocker",
-      "VALIDATION_ERROR",
-    );
+    throw new AxiError("kind must be review_ready, completion, or blocker", "VALIDATION_ERROR");
   }
   if (!isSafeId(value.owner)) throw new AxiError("owner is not path-safe", "VALIDATION_ERROR");
   if (!isSafeId(value.task_id)) throw new AxiError("task_id is not path-safe", "VALIDATION_ERROR");
@@ -163,8 +158,8 @@ export function validateNotificationEvent(value: unknown): NotificationEvent {
       throw new AxiError(`links[${index}].url must be an HTTPS URL`, "VALIDATION_ERROR");
     return { label: link.label, url: link.url };
   });
-  if (value.priority !== undefined && value.priority !== "high" && value.priority !== "low") {
-    throw new AxiError("priority must be high or low", "VALIDATION_ERROR");
+  if (Object.prototype.hasOwnProperty.call(value, "priority")) {
+    throw new AxiError("notification priority is not supported", "VALIDATION_ERROR");
   }
   const event = {
     schema: NOTIFICATION_EVENT_SCHEMA,
@@ -176,7 +171,6 @@ export function validateNotificationEvent(value: unknown): NotificationEvent {
     occurred_at: value.occurred_at,
     summary: value.summary,
     links,
-    ...(value.priority === undefined ? {} : { priority: value.priority }),
   } as NotificationEvent;
   const rendered = renderNotification(event);
   if (rendered.length > TG_TEXT_LIMIT) {
@@ -249,6 +243,25 @@ function atomicWrite(path: string, value: unknown): void {
   }
 }
 
+function exclusiveWrite(path: string, value: unknown): void {
+  const parent = dirname(path);
+  ensurePrivateDirectory(parent);
+  const fd = openSync(path, "wx", 0o600);
+  try {
+    writeFileSync(fd, `${JSON.stringify(value)}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  chmodSync(path, 0o600);
+  const dirFd = openSync(parent, "r");
+  try {
+    fsyncSync(dirFd);
+  } finally {
+    closeSync(dirFd);
+  }
+}
+
 function readJson(path: string): unknown {
   try {
     if (!lstatSync(path).isFile()) throw new Error("not a regular file");
@@ -300,23 +313,30 @@ function ensureDeliveryIdentity(dir: string, ctx: TgRequestContext): void {
     bot_fingerprint: botFingerprint(ctx.token),
     chat_id: ctx.chatId,
   };
-  if (pathExists(path)) {
-    const actual = readJson(path);
-    if (
-      !isObject(actual) ||
-      actual.schema !== expected.schema ||
-      actual.bot_fingerprint !== expected.bot_fingerprint ||
-      actual.chat_id !== expected.chat_id
-    ) {
-      throw new AxiError(
-        "private delivery records belong to a different bot or chat",
-        "VALIDATION_ERROR",
-        ["Use a separate --delivery-dir for each Telegram bot and target chat"],
-      );
+  try {
+    exclusiveWrite(path, expected);
+  } catch (error) {
+    if (!(
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "EEXIST"
+    )) {
+      throw new AxiError(`could not claim private delivery identity: ${path}`, "VALIDATION_ERROR");
     }
-    return;
   }
-  atomicWrite(path, expected);
+  const actual = readJson(path);
+  if (
+    !isObject(actual) ||
+    actual.schema !== expected.schema ||
+    actual.bot_fingerprint !== expected.bot_fingerprint ||
+    actual.chat_id !== expected.chat_id
+  ) {
+    throw new AxiError(
+      "private delivery records belong to a different bot or chat",
+      "VALIDATION_ERROR",
+      ["Use a separate --delivery-dir for each Telegram bot and target chat"],
+    );
+  }
 }
 
 function readDeliveryRecord(path: string): DeliveryRecord {
@@ -327,7 +347,7 @@ function readDeliveryRecord(path: string): DeliveryRecord {
     typeof value.event_id !== "string" ||
     typeof value.event_hash !== "string" ||
     typeof value.chat_id !== "string" ||
-    !["pending", "confirmed", "failed", "unknown", "partial"].includes(String(value.delivery)) ||
+    !["pending", "confirmed", "failed", "unknown"].includes(String(value.delivery)) ||
     typeof value.confirmed_chunks !== "number" ||
     typeof value.chunks !== "number" ||
     !Array.isArray(value.message_ids) ||
@@ -341,6 +361,46 @@ function readDeliveryRecord(path: string): DeliveryRecord {
 
 function writeDeliveryRecord(path: string, record: DeliveryRecord): void {
   atomicWrite(path, record);
+}
+
+function claimPath(dir: string, eventId: string): string {
+  return join(dir, "receipts", `${eventId}.lock`);
+}
+
+function claimDelivery(dir: string, eventId: string): () => void {
+  const path = claimPath(dir, eventId);
+  try {
+    exclusiveWrite(path, {
+      event_id: eventId,
+      pid: process.pid,
+      claimed_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "EEXIST"
+    ) {
+      throw new AxiError(
+        `notification ${eventId} is already claimed by another delivery attempt`,
+        "VALIDATION_ERROR",
+      );
+    }
+    throw new AxiError(`could not claim notification ${eventId}`, "VALIDATION_ERROR");
+  }
+  return (): void => {
+    try {
+      unlinkSync(path);
+    } catch (error) {
+      if (!(
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      )) {
+        throw error;
+      }
+    }
+  };
 }
 
 function isUncertain(error: unknown): boolean {
@@ -390,7 +450,27 @@ export async function deliverNotification(
       );
     }
   } else {
-    atomicWrite(eventFile, event);
+    try {
+      exclusiveWrite(eventFile, event);
+    } catch (error) {
+      if (!(
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "EEXIST"
+      )) {
+        throw new AxiError(
+          `could not claim notification event: ${event.event_id}`,
+          "VALIDATION_ERROR",
+        );
+      }
+      const existing = validateNotificationEvent(readJson(eventFile));
+      if (eventHash(existing) !== hash) {
+        throw new AxiError(
+          `event_id already exists with different content: ${event.event_id}`,
+          "VALIDATION_ERROR",
+        );
+      }
+    }
   }
 
   if (pathExists(receiptFile)) {
@@ -417,36 +497,56 @@ export async function deliverNotification(
     if (!options.retry) throw new NotificationDeliveryError(existing, receiptFile);
   }
 
-  const chunks = chunkMessage(renderNotification(event));
-  let record: DeliveryRecord = {
-    schema: DELIVERY_RECORD_SCHEMA,
-    event_id: event.event_id,
-    event_hash: hash,
-    chat_id: ctx.chatId,
-    delivery: "pending",
-    confirmed_chunks: 0,
-    chunks: chunks.length,
-    message_ids: [],
-    updated_at: new Date().toISOString(),
-  };
-  writeDeliveryRecord(receiptFile, record);
-  for (const [index, chunk] of chunks.entries()) {
+  const releaseClaim = claimDelivery(dir, event.event_id);
+  try {
+    if (pathExists(receiptFile)) {
+      const existing = readDeliveryRecord(receiptFile);
+      if (existing.event_hash !== hash || existing.chat_id !== ctx.chatId) {
+        throw new AxiError(
+          `delivery receipt does not match event ${event.event_id}`,
+          "VALIDATION_ERROR",
+        );
+      }
+      if (existing.delivery === "confirmed") {
+        return {
+          event_id: event.event_id,
+          delivery: "confirmed",
+          deduplicated: true,
+          chat: existing.chat_id,
+          chunks: existing.chunks,
+          confirmed_chunks: existing.confirmed_chunks,
+          message_ids: existing.message_ids,
+          event_file: eventFile,
+          receipt_file: receiptFile,
+        };
+      }
+      if (!options.retry) throw new NotificationDeliveryError(existing, receiptFile);
+    }
+
+    let record: DeliveryRecord = {
+      schema: DELIVERY_RECORD_SCHEMA,
+      event_id: event.event_id,
+      event_hash: hash,
+      chat_id: ctx.chatId,
+      delivery: "pending",
+      confirmed_chunks: 0,
+      chunks: 1,
+      message_ids: [],
+      updated_at: new Date().toISOString(),
+    };
+    writeDeliveryRecord(receiptFile, record);
     try {
       const result = await tgRequest<{ message_id: number }>(
         "sendMessage",
-        {
-          chat_id: ctx.chatId,
-          text: chunk,
-          disable_notification: event.priority === "low",
-        },
+        { chat_id: ctx.chatId, text: renderNotification(event) },
         ctx,
         options,
       );
       record = {
         ...record,
-        delivery: index === chunks.length - 1 ? "confirmed" : "pending",
-        confirmed_chunks: index + 1,
-        message_ids: [...record.message_ids, result.message_id],
+        delivery: "confirmed",
+        confirmed_chunks: 1,
+        message_ids: [result.message_id],
         updated_at: new Date().toISOString(),
       };
       writeDeliveryRecord(receiptFile, record);
@@ -454,7 +554,7 @@ export async function deliverNotification(
       const uncertain = isUncertain(error);
       record = {
         ...record,
-        delivery: record.message_ids.length > 0 ? "partial" : uncertain ? "unknown" : "failed",
+        delivery: uncertain ? "unknown" : "failed",
         failure_kind: uncertain ? "uncertain" : "definite",
         error: errorDetails(error),
         updated_at: new Date().toISOString(),
@@ -462,18 +562,20 @@ export async function deliverNotification(
       writeDeliveryRecord(receiptFile, record);
       throw new NotificationDeliveryError(record, receiptFile);
     }
+    return {
+      event_id: event.event_id,
+      delivery: record.delivery,
+      deduplicated: false,
+      chat: record.chat_id,
+      chunks: record.chunks,
+      confirmed_chunks: record.confirmed_chunks,
+      message_ids: record.message_ids,
+      event_file: eventFile,
+      receipt_file: receiptFile,
+    };
+  } finally {
+    releaseClaim();
   }
-  return {
-    event_id: event.event_id,
-    delivery: record.delivery,
-    deduplicated: false,
-    chat: record.chat_id,
-    chunks: record.chunks,
-    confirmed_chunks: record.confirmed_chunks,
-    message_ids: record.message_ids,
-    event_file: eventFile,
-    receipt_file: receiptFile,
-  };
 }
 
 /** Read-only local status for startup and operator checks; never contacts Telegram. */
@@ -486,7 +588,6 @@ export function readDeliverySummary(dir: string): DeliverySummary {
       pending: 0,
       failed: 0,
       unknown: 0,
-      partial: 0,
     };
   }
   ensurePrivateDirectory(dir);
@@ -499,7 +600,6 @@ export function readDeliverySummary(dir: string): DeliverySummary {
       pending: 0,
       failed: 0,
       unknown: 0,
-      partial: 0,
     };
   }
   ensurePrivateDirectory(receiptsDir);
@@ -513,7 +613,6 @@ export function readDeliverySummary(dir: string): DeliverySummary {
     pending: records.filter((record) => record.delivery === "pending").length,
     failed: records.filter((record) => record.delivery === "failed").length,
     unknown: records.filter((record) => record.delivery === "unknown").length,
-    partial: records.filter((record) => record.delivery === "partial").length,
   };
   const latest = records
     .map((record) => record.updated_at)
