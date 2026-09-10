@@ -28,7 +28,9 @@ corepack pnpm dev <command>
 ```
 
 The installer retains the exact revision with production dependencies outside
-the checkout and points `/home/ubuntu/firstmate/.local/bin/tg-axi` at it.
+the checkout and points `/home/ubuntu/firstmate/.local/bin/tg-axi` at it. A
+rerun resumes launcher publication if interruption occurs after the runtime is
+published.
 
 Requires a Telegram bot token in `~/.claude/channels/telegram/.env` (the `TELEGRAM_BOT_TOKEN=` line) or the `TELEGRAM_BOT_TOKEN` env var. The token is read at runtime and never committed.
 

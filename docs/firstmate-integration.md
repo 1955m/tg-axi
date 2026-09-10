@@ -27,7 +27,8 @@ Firstmate's tracked config or in an event file.
 
 Run `TG_AXI_CHECKOUT="$(pwd)" integrations/firstmate/install-runtime.sh` to
 retain the validated revision and its production dependencies outside the
-checkout. Create `/home/ubuntu/firstmate/.config/tg-axi` mode 0700, copy
+checkout; rerunning resumes launcher publication if interruption occurs after
+the runtime is published. Create `/home/ubuntu/firstmate/.config/tg-axi` mode 0700, copy
 `integrations/firstmate/telegram.json.example` there as `telegram.json` mode
 0600, and replace the private chat id. It is the enabled configuration
 consumed by the wrapper and points at the retained launcher. It contains the absolute validated binary, private

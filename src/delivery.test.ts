@@ -160,6 +160,32 @@ describe("durable notification delivery", () => {
     expect(readDeliverySummary(dir)).toMatchObject({ unknown: 1, failed: 0 });
   });
 
+  it("preserves a pending receipt as uncertain after a rejected retry", async () => {
+    const dir = root();
+    globalThis.fetch = (() => Promise.resolve(ok(48))) as unknown as typeof fetch;
+    const persist = (path: string, record: Record<string, unknown>): void => {
+      if (record.delivery === "confirmed") throw new Error("disk full");
+      fs.writeFileSync(path, `${JSON.stringify(record)}\n`);
+    };
+
+    await expect(deliverNotification(event, CTX, dir, { persist })).rejects.toBeInstanceOf(
+      NotificationPersistenceError,
+    );
+
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        response({ ok: false, error_code: 403, description: "forbidden" }, 403),
+      )) as unknown as typeof fetch;
+
+    await expect(deliverNotification(event, CTX, dir, { retry: true })).rejects.toBeInstanceOf(
+      NotificationDeliveryError,
+    );
+    const receipt = JSON.parse(
+      fs.readFileSync(join(dir, "receipts", `${event.event_id}.json`), "utf8"),
+    ) as Record<string, unknown>;
+    expect(receipt).toMatchObject({ delivery: "unknown", failure_kind: "uncertain" });
+  });
+
   it("keeps an acknowledged message distinct from receipt persistence failure", async () => {
     const dir = root();
     globalThis.fetch = (() => Promise.resolve(ok(46))) as unknown as typeof fetch;

@@ -599,19 +599,20 @@ export async function deliverNotification(
     }
 
     const previousRecord = pathExists(receiptFile) ? readDeliveryRecord(receiptFile) : undefined;
-    const wasUnknown = previousRecord?.delivery === "unknown";
+    const preservesUncertainty =
+      previousRecord?.delivery === "pending" || previousRecord?.delivery === "unknown";
     let record: DeliveryRecord = {
       schema: DELIVERY_RECORD_SCHEMA,
       event_id: event.event_id,
       event_hash: hash,
       chat_id: ctx.chatId,
-      delivery: wasUnknown ? "unknown" : "pending",
+      delivery: preservesUncertainty ? "unknown" : "pending",
       confirmed_chunks: 0,
       chunks: 1,
       message_ids: [],
       updated_at: new Date().toISOString(),
     };
-    if (wasUnknown) {
+    if (preservesUncertainty) {
       record.failure_kind = "uncertain";
       record.error = previousRecord?.error;
     }
@@ -625,7 +626,7 @@ export async function deliverNotification(
         options,
       );
     } catch (error) {
-      const uncertain = wasUnknown || isUncertain(error);
+      const uncertain = preservesUncertainty || isUncertain(error);
       record = {
         ...record,
         delivery: uncertain ? "unknown" : "failed",

@@ -11,19 +11,37 @@ fi
 runtime_root=/home/ubuntu/firstmate/.local/lib/tg-axi
 runtime_dir="$runtime_root/$revision"
 launcher=/home/ubuntu/firstmate/.local/bin/tg-axi
+launcher_tmp="$launcher.$revision.tmp"
+stage_dir="$runtime_root/.${revision}.$$.$RANDOM.staging"
+
+cleanup_launcher() {
+  rm -f "$launcher_tmp"
+}
+
+publish_launcher() {
+  printf '#!/usr/bin/env bash\nexec /home/ubuntu/firstmate/.local/lib/tg-axi/%s/dist/bin/tg-axi.js "$@"\n' "$revision" > "$launcher_tmp"
+  install -m 0755 "$launcher_tmp" "$launcher"
+}
+
+install -d -m 0755 "$runtime_root" "$(dirname "$launcher")"
 if [ -e "$runtime_dir" ]; then
-  printf 'validated tg-axi runtime already exists: %s\n' "$runtime_dir" >&2
+  if [ -f "$runtime_dir/package.json" ] && [ -f "$runtime_dir/pnpm-lock.yaml" ] && [ -d "$runtime_dir/node_modules" ] && [ -f "$runtime_dir/dist/bin/tg-axi.js" ]; then
+    trap cleanup_launcher EXIT
+    publish_launcher
+    trap - EXIT
+    cleanup_launcher
+    printf 'resumed %s\n' "$runtime_dir"
+    exit 0
+  fi
+  printf 'validated tg-axi runtime is incomplete: %s\n' "$runtime_dir" >&2
   exit 2
 fi
 
 corepack pnpm --dir "$repo_root" install --frozen-lockfile
 corepack pnpm --dir "$repo_root" run build
-install -d -m 0755 "$runtime_root" "$(dirname "$launcher")"
-stage_dir="$runtime_root/.${revision}.$$.$RANDOM.staging"
-launcher_tmp="$launcher.$revision.tmp"
-launcher_stage="$launcher.$revision.staged"
 cleanup() {
-  rm -rf "$stage_dir" "$launcher_tmp" "$launcher_stage"
+  rm -rf "$stage_dir"
+  cleanup_launcher
 }
 trap cleanup EXIT
 if [ -e "$stage_dir" ]; then
@@ -42,8 +60,6 @@ if [ -e "$runtime_dir" ]; then
   printf 'validated tg-axi runtime appeared during installation: %s\n' "$runtime_dir" >&2
   exit 2
 fi
-printf '#!/usr/bin/env bash\nexec /home/ubuntu/firstmate/.local/lib/tg-axi/%s/dist/bin/tg-axi.js "$@"\n' "$revision" > "$launcher_tmp"
-install -m 0755 "$launcher_tmp" "$launcher_stage"
 mv -T "$stage_dir" "$runtime_dir"
-mv -T "$launcher_stage" "$launcher"
+publish_launcher
 printf 'installed %s\n' "$runtime_dir"
