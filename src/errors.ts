@@ -8,6 +8,15 @@ export interface TgErrorParameters {
   migrate_to_chat_id?: number;
 }
 
+/** Remove bot tokens and token-bearing Bot API URL fragments from diagnostics. */
+export function redactSecrets(value: string, token?: string): string {
+  let redacted = value;
+  if (token) redacted = redacted.split(token).join("[REDACTED]");
+  return redacted
+    .replace(/\/bot[^/\s"'`]+/gi, "/bot[REDACTED]")
+    .replace(/\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g, "[REDACTED]");
+}
+
 /**
  * Map a Telegram Bot API error response to a structured AxiError.
  * Telegram returns `{ ok: false, error_code, description, parameters }` even for
@@ -21,7 +30,7 @@ export function mapTgApiError(
   parameters?: TgErrorParameters,
 ): AxiError {
   const code = errorCode ?? 0;
-  const desc = description?.trim() || "";
+  const desc = redactSecrets(description?.trim() || "");
   if (code === 429) {
     const retry = parameters?.retry_after;
     return new AxiError(

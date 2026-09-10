@@ -44,6 +44,17 @@ export function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
 }
 
+/** Reject unconsumed positional tokens or known flags after command parsing. */
+export function assertNoRemainingArgs(args: string[], commandName: string): void {
+  if (args.length > 0) {
+    throw new AxiError(
+      `unexpected argument for \`${commandName}\`: ${args[0]}`,
+      "VALIDATION_ERROR",
+      [`Run \`tg-axi ${commandName} --help\` for valid arguments`],
+    );
+  }
+}
+
 /** Check if a boolean flag is present and remove it from args. */
 export function takeBoolFlag(args: string[], flag: string): boolean {
   const idx = args.indexOf(flag);

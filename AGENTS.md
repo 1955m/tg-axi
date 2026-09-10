@@ -36,6 +36,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `409 Conflict` (other poller OR active webhook) → `VALIDATION_ERROR` with clear guidance; `--drop-pending-webhook` calls `deleteWebhook` (the ONLY place tg-axi removes a webhook — never implicit).
 - `TgRequestOptions.signal` (external `AbortSignal`) threads through `tgFetch` + `downloadTgFile`; `listen` uses it for prompt SIGINT/SIGTERM shutdown (abort the in-flight long-poll, exit after the current batch). The outbound `send` path passes no signal → unaffected.
 
+## Outbound notifications (notify / delivery.ts)
+
+- `tg-axi notify --event-file <path>` is the Firstmate-facing outbound contract: the event must have a stable safe `event_id`, short summary, and 1–3 HTTPS links. `delivery.ts` owns the Traditional Chinese rendering, private mode-0700/0600 event/receipt records, confirmed replay dedupe, and explicit retry requirement for non-confirmed outcomes; it makes no exactly-once claim.
+- `TG_DELIVERY_DIR` / `--delivery-dir` resolves the delivery record root. A per-bot fingerprint + chat id in `metadata.json` prevents accidental cross-bot reuse. `notify status` is local/read-only and never contacts Telegram.
+- `integrations/firstmate/tg-axi-notify.sh` is a narrow opt-in wrapper for verified Firstmate outcomes. It accepts one event file, passes through non-zero delivery failures, and never handles arbitrary chat text or credentials. See `docs/firstmate-integration.md`.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

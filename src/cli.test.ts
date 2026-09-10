@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { TOP_HELP, DESCRIPTION, DEFAULT_CHAT } from "./cli.js";
 
 describe("top-level help", () => {
-  it("lists all 6 commands", () => {
-    expect(TOP_HELP).toMatch(/^commands\[6\]:/m);
-    for (const cmd of ["send", "status", "receive", "listen", "setup"]) {
+  it("lists all 7 commands", () => {
+    expect(TOP_HELP).toMatch(/^commands\[7\]:/m);
+    for (const cmd of ["send", "notify", "status", "receive", "listen", "setup"]) {
       expect(TOP_HELP).toContain(cmd);
     }
   });
