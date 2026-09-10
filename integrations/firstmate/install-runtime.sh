@@ -12,15 +12,17 @@ runtime_root=/home/ubuntu/firstmate/.local/lib/tg-axi
 runtime_dir="$runtime_root/$revision"
 launcher=/home/ubuntu/firstmate/.local/bin/tg-axi
 launcher_tmp="$launcher.$revision.tmp"
+launcher_stage="$launcher.$revision.staged"
 stage_dir="$runtime_root/.${revision}.$$.$RANDOM.staging"
 
 cleanup_launcher() {
-  rm -f "$launcher_tmp"
+  rm -f "$launcher_tmp" "$launcher_stage"
 }
 
 publish_launcher() {
   printf '#!/usr/bin/env bash\nexec /home/ubuntu/firstmate/.local/lib/tg-axi/%s/dist/bin/tg-axi.js "$@"\n' "$revision" > "$launcher_tmp"
-  install -m 0755 "$launcher_tmp" "$launcher"
+  install -m 0755 "$launcher_tmp" "$launcher_stage"
+  mv -T "$launcher_stage" "$launcher"
 }
 
 install -d -m 0755 "$runtime_root" "$(dirname "$launcher")"
