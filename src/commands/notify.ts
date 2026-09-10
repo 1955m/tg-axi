@@ -14,11 +14,11 @@ Deliver one Firstmate-owned notification event with a short Traditional Chinese
 summary and at least one HTTPS artifact or PR link. The event and delivery
 receipt are persisted privately before sending. A confirmed event is replay-safe.
 
-flags[4]:
+flags[3]:
   --event-file <path> (required), --delivery-dir <dir> (default ${deliveryDir()}),
-  --retry (explicitly retry a non-confirmed receipt), --json
+  --retry (explicitly retry a non-confirmed receipt)
 status:
-  tg-axi notify status [--delivery-dir <dir>] [--json]
+  tg-axi notify status [--delivery-dir <dir>]
 examples:
   tg-axi notify --event-file ./event.json
   tg-axi notify --event-file ./event.json --retry
@@ -52,10 +52,9 @@ export async function notifyCommand(
   if (status) args.shift();
   rejectUnknownFlags(
     args,
-    ["--event-file", "--delivery-dir", "--retry", "--json"],
+    ["--event-file", "--delivery-dir", "--retry"],
     `notify${status ? " status" : ""}`,
   );
-  const json = takeBoolFlag(args, "--json");
   const hasDeliveryDir =
     hasFlag(args, "--delivery-dir") || args.some((arg) => arg.startsWith("--delivery-dir="));
   const dir = takeFlag(args, "--delivery-dir");
@@ -66,7 +65,7 @@ export async function notifyCommand(
   const eventFile = status ? undefined : takeFlag(args, "--event-file");
   const retry = takeBoolFlag(args, "--retry");
   if (status && (eventFile !== undefined || retry)) {
-    throw new AxiError("notify status accepts only --delivery-dir and --json", "VALIDATION_ERROR");
+    throw new AxiError("notify status accepts only --delivery-dir", "VALIDATION_ERROR");
   }
   assertNoRemainingArgs(args, `notify${status ? " status" : ""}`);
 
@@ -75,7 +74,7 @@ export async function notifyCommand(
       ...readDeliverySummary(resolvedDir),
       help: ["Run `tg-axi notify --event-file <path>` at a verified Firstmate outcome"],
     };
-    return json ? JSON.stringify(output) : output;
+    return output;
   }
 
   if (!eventFile || eventFile.startsWith("--")) {
@@ -87,5 +86,5 @@ export async function notifyCommand(
   const event = readNotificationEvent(eventFile);
   const result = await deliverNotification(event, requireToken(ctx), resolvedDir, { retry });
   const output = resultOutput(result);
-  return json ? JSON.stringify(output) : output;
+  return output;
 }

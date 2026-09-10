@@ -22,13 +22,13 @@ This is the out-of-band alert channel for Firstmate's verified outcomes and away
 
 ```sh
 # The package is private and is not published. Build/install from a validated checkout:
-corepack pnpm install --frozen-lockfile
-corepack pnpm run build
-install -d /home/ubuntu/firstmate/.local/bin
-ln -sfn "$(pwd)/dist/bin/tg-axi.js" /home/ubuntu/firstmate/.local/bin/tg-axi
+TG_AXI_CHECKOUT="$(pwd)" integrations/firstmate/install-runtime.sh
 # or run on demand from the checkout:
 corepack pnpm dev <command>
 ```
+
+The installer retains the exact revision with production dependencies outside
+the checkout and points `/home/ubuntu/firstmate/.local/bin/tg-axi` at it.
 
 Requires a Telegram bot token in `~/.claude/channels/telegram/.env` (the `TELEGRAM_BOT_TOKEN=` line) or the `TELEGRAM_BOT_TOKEN` env var. The token is read at runtime and never committed.
 
@@ -41,8 +41,8 @@ Requires a Telegram bot token in `~/.claude/channels/telegram/.env` (the `TELEGR
 | Command         | Flags                                                                                                                                | Notes                                                                           |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | `send`          | `--chat`, `--title`, `--priority high\|low`, `--text-file <path>`, `--stdin`                                                         | chunk-split at 4096; 429 retry; exactly one of `--text-file`/`--stdin` required |
-| `notify`        | `--event-file <path>`, `--delivery-dir <dir>`, `--retry`, `--json`                                                                   | Firstmate event; persists private receipt; confirmed replay is deduplicated     |
-| `notify status` | `--delivery-dir <dir>`, `--json`                                                                                                     | local delivery counts only; never contacts Telegram                             |
+| `notify`        | `--event-file <path>`, `--delivery-dir <dir>`, `--retry`                                                                             | Firstmate event; persists private receipt; confirmed replay is deduplicated     |
+| `notify status` | `--delivery-dir <dir>`                                                                                                               | local delivery counts only; never contacts Telegram                             |
 | `status`        | `--chat`                                                                                                                             | getMe + getChat health check                                                    |
 | `receive`       | `--limit <1-100>`, `--timeout <0-50s>`, `--json`, `--drop-pending-webhook`, `--inbox <dir>`, `--offset-file <path>`, `--no-download` | one-shot drain; persist offset; normalize + download every message type         |
 | `listen`        | `--limit`, `--timeout`, `--inbox`, `--offset-file <path>`, `--no-download`, `--json`                                                 | continuous long-poll loop; clean SIGINT/SIGTERM shutdown                        |
@@ -62,8 +62,8 @@ All output is [TOON](https://www.npmjs.com/package/@toon-format/toon)-encoded: `
 Firstmate writes a versioned event JSON only after a verified review-ready,
 completion, or blocker outcome. The event must contain a stable
 `event_id`, a short Traditional Chinese `summary`, and one to three real HTTPS
-links (usually an artifact or PR). Run `tg-axi notify --event-file <path>` or
-the narrow `integrations/firstmate/tg-axi-notify.sh <config> <event>` wrapper. The event and
+links (usually an artifact or PR). Run the configured
+`integrations/firstmate/tg-axi-notify.sh <config> <event>` wrapper. The event and
 receipt are stored before sending under the private `TG_DELIVERY_DIR` location
 (default `~/.claude/channels/telegram/delivery`). A confirmed event never sends
 again on replay. A pending, failed, or unknown receipt requires an

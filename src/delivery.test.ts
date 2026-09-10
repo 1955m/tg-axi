@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync, mkdtempSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   deliverNotification,
   NotificationDeliveryError,
+  NotificationPersistenceError,
   readDeliverySummary,
   validateNotificationEvent,
   type NotificationEvent,
@@ -73,10 +77,13 @@ describe("durable notification delivery", () => {
     expect(first.deduplicated).toBe(false);
     expect(second).toMatchObject({ delivery: "confirmed", deduplicated: true, message_ids: [42] });
     expect(calls).toBe(1);
-    const receipt = JSON.parse(readFileSync(first.receipt_file, "utf8")) as Record<string, unknown>;
+    const receipt = JSON.parse(fs.readFileSync(first.receipt_file, "utf8")) as Record<
+      string,
+      unknown
+    >;
     expect(receipt.delivery).toBe("confirmed");
-    expect(statSync(first.receipt_file).mode & 0o777).toBe(0o600);
-    expect(readdirSync(dir)).toEqual(
+    expect(fs.statSync(first.receipt_file).mode & 0o777).toBe(0o600);
+    expect(fs.readdirSync(dir)).toEqual(
       expect.arrayContaining(["events", "receipts", "metadata.json"]),
     );
     expect(readDeliverySummary(dir)).toMatchObject({ events: 1, confirmed: 1, pending: 0 });
@@ -97,7 +104,7 @@ describe("durable notification delivery", () => {
       expect(String(error)).not.toContain(TOKEN);
     }
     const receiptPath = join(dir, "receipts", `${event.event_id}.json`);
-    const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
     expect(receipt.delivery).toBe("unknown");
     expect(JSON.stringify(receipt)).not.toContain(TOKEN);
     expect(readDeliverySummary(dir)).toMatchObject({ events: 1, unknown: 1, confirmed: 0 });
@@ -124,9 +131,26 @@ describe("durable notification delivery", () => {
       NotificationDeliveryError,
     );
     const receipt = JSON.parse(
-      readFileSync(join(dir, "receipts", `${event.event_id}.json`), "utf8"),
+      fs.readFileSync(join(dir, "receipts", `${event.event_id}.json`), "utf8"),
     ) as Record<string, unknown>;
     expect(receipt).toMatchObject({ delivery: "failed", failure_kind: "definite" });
+  });
+
+  it("keeps an acknowledged message distinct from receipt persistence failure", async () => {
+    const dir = root();
+    globalThis.fetch = (() => Promise.resolve(ok(46))) as unknown as typeof fetch;
+    const persist = (path: string, record: Record<string, unknown>): void => {
+      if (record.delivery === "confirmed") throw new Error("disk full");
+      fs.writeFileSync(path, `${JSON.stringify(record)}\n`);
+    };
+
+    await expect(deliverNotification(event, CTX, dir, { persist })).rejects.toBeInstanceOf(
+      NotificationPersistenceError,
+    );
+    const receipt = JSON.parse(
+      fs.readFileSync(join(dir, "receipts", `${event.event_id}.json`), "utf8"),
+    ) as Record<string, unknown>;
+    expect(receipt).toMatchObject({ delivery: "pending", message_ids: [] });
   });
 
   it("rejects an event that would exceed the single-message contract", () => {
@@ -168,5 +192,41 @@ describe("durable notification delivery", () => {
     release();
     await expect(first).resolves.toMatchObject({ delivery: "confirmed", message_ids: [45] });
     expect(calls).toBe(1);
+  });
+
+  it("recovers an abandoned claim after the owner is killed", async () => {
+    const dir = root();
+    const receipts = join(dir, "receipts");
+    fs.mkdirSync(receipts, { recursive: true, mode: 0o700 });
+    const childScript = `import { deliverNotification } from "./src/delivery.ts";
+globalThis.fetch = () => {
+  console.log("sending");
+  return new Promise(() => {});
+};
+await deliverNotification(JSON.parse(process.argv[1]), { token: process.argv[3], chatId: "123456789" }, process.argv[2]);`;
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        childScript,
+        JSON.stringify(event),
+        dir,
+        TOKEN,
+      ],
+      { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] },
+    );
+    await once(child.stdout!, "data");
+    child.kill("SIGKILL");
+    await once(child, "exit");
+    await new Promise((resolve) => setTimeout(resolve, 3_500));
+
+    globalThis.fetch = (() => Promise.resolve(ok(47))) as unknown as typeof fetch;
+    await expect(deliverNotification(event, CTX, dir, { retry: true })).resolves.toMatchObject({
+      delivery: "confirmed",
+      message_ids: [47],
+    });
   });
 });

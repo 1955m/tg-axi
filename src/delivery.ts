@@ -3,6 +3,7 @@ import {
   closeSync,
   fsyncSync,
   lstatSync,
+  linkSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -13,6 +14,7 @@ import {
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
+import lockfile from "proper-lockfile";
 import { AxiError, redactSecrets } from "./errors.js";
 import { tgRequest, type TgRequestContext, type TgRequestOptions } from "./tg.js";
 import { TG_TEXT_LIMIT } from "./config.js";
@@ -75,6 +77,11 @@ export interface DeliverySummary {
   failed: number;
   unknown: number;
   latest_updated_at?: string;
+}
+
+export interface NotificationDeliveryOptions extends TgRequestOptions {
+  retry?: boolean;
+  persist?: (path: string, record: DeliveryRecord) => void;
 }
 
 const KIND_LABELS: Record<NotificationKind, string> = {
@@ -226,39 +233,69 @@ function atomicWrite(path: string, value: unknown): void {
   const parent = dirname(path);
   ensurePrivateDirectory(parent);
   const temp = join(parent, `.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`);
-  const fd = openSync(temp, "wx", 0o600);
+  let fd: number | undefined;
   try {
+    fd = openSync(temp, "wx", 0o600);
     writeFileSync(fd, `${JSON.stringify(value)}\n`);
     fsyncSync(fd);
-  } finally {
     closeSync(fd);
-  }
-  chmodSync(temp, 0o600);
-  renameSync(temp, path);
-  const dirFd = openSync(parent, "r");
-  try {
-    fsyncSync(dirFd);
+    fd = undefined;
+    chmodSync(temp, 0o600);
+    renameSync(temp, path);
+    const dirFd = openSync(parent, "r");
+    try {
+      fsyncSync(dirFd);
+    } finally {
+      closeSync(dirFd);
+    }
   } finally {
-    closeSync(dirFd);
+    if (fd !== undefined) closeSync(fd);
+    try {
+      unlinkSync(temp);
+    } catch (error) {
+      if (!(
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      )) {
+        throw error;
+      }
+    }
   }
 }
 
 function exclusiveWrite(path: string, value: unknown): void {
   const parent = dirname(path);
   ensurePrivateDirectory(parent);
-  const fd = openSync(path, "wx", 0o600);
+  const temp = join(parent, `.${process.pid}.${Math.random().toString(16).slice(2)}.claim`);
+  let fd: number | undefined;
   try {
+    fd = openSync(temp, "wx", 0o600);
     writeFileSync(fd, `${JSON.stringify(value)}\n`);
     fsyncSync(fd);
-  } finally {
     closeSync(fd);
-  }
-  chmodSync(path, 0o600);
-  const dirFd = openSync(parent, "r");
-  try {
-    fsyncSync(dirFd);
+    fd = undefined;
+    chmodSync(temp, 0o600);
+    linkSync(temp, path);
+    const dirFd = openSync(parent, "r");
+    try {
+      fsyncSync(dirFd);
+    } finally {
+      closeSync(dirFd);
+    }
   } finally {
-    closeSync(dirFd);
+    if (fd !== undefined) closeSync(fd);
+    try {
+      unlinkSync(temp);
+    } catch (error) {
+      if (!(
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      )) {
+        throw error;
+      }
+    }
   }
 }
 
@@ -364,22 +401,24 @@ function writeDeliveryRecord(path: string, record: DeliveryRecord): void {
 }
 
 function claimPath(dir: string, eventId: string): string {
-  return join(dir, "receipts", `${eventId}.lock`);
+  return join(dir, "receipts", `${eventId}.claim`);
 }
 
-function claimDelivery(dir: string, eventId: string): () => void {
+async function claimDelivery(dir: string, eventId: string): Promise<() => Promise<void>> {
   const path = claimPath(dir, eventId);
+  let release: () => Promise<void>;
   try {
-    exclusiveWrite(path, {
-      event_id: eventId,
-      pid: process.pid,
-      claimed_at: new Date().toISOString(),
+    release = await lockfile.lock(path, {
+      realpath: false,
+      stale: 2_000,
+      update: 1_000,
+      retries: 0,
     });
   } catch (error) {
     if (
       error instanceof Error &&
       "code" in error &&
-      (error as NodeJS.ErrnoException).code === "EEXIST"
+      (error as NodeJS.ErrnoException).code === "ELOCKED"
     ) {
       throw new AxiError(
         `notification ${eventId} is already claimed by another delivery attempt`,
@@ -388,19 +427,7 @@ function claimDelivery(dir: string, eventId: string): () => void {
     }
     throw new AxiError(`could not claim notification ${eventId}`, "VALIDATION_ERROR");
   }
-  return (): void => {
-    try {
-      unlinkSync(path);
-    } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        (error as NodeJS.ErrnoException).code === "ENOENT"
-      )) {
-        throw error;
-      }
-    }
-  };
+  return async (): Promise<void> => release();
 }
 
 function isUncertain(error: unknown): boolean {
@@ -430,13 +457,24 @@ export class NotificationDeliveryError extends AxiError {
   }
 }
 
+export class NotificationPersistenceError extends AxiError {
+  constructor(eventId: string, receiptFile: string, error: unknown) {
+    super(
+      `Telegram acknowledged notification ${eventId}, but the receipt could not be persisted at ${receiptFile}: ${redactSecrets(error instanceof Error ? error.message : String(error))}`,
+      "UNKNOWN",
+      ["Repair local delivery storage before deciding whether an explicit retry is safe"],
+    );
+  }
+}
+
 /** Deliver one event, preserving a private receipt at every handoff boundary. */
 export async function deliverNotification(
   event: NotificationEvent,
   ctx: TgRequestContext,
   dir: string,
-  options: TgRequestOptions & { retry?: boolean } = {},
+  options: NotificationDeliveryOptions = {},
 ): Promise<NotificationResult> {
+  const persist = options.persist ?? writeDeliveryRecord;
   ensureDeliveryIdentity(dir, ctx);
   const eventFile = eventPath(dir, event.event_id);
   const receiptFile = receiptPath(dir, event.event_id);
@@ -497,7 +535,7 @@ export async function deliverNotification(
     if (!options.retry) throw new NotificationDeliveryError(existing, receiptFile);
   }
 
-  const releaseClaim = claimDelivery(dir, event.event_id);
+  const releaseClaim = await claimDelivery(dir, event.event_id);
   try {
     if (pathExists(receiptFile)) {
       const existing = readDeliveryRecord(receiptFile);
@@ -534,22 +572,15 @@ export async function deliverNotification(
       message_ids: [],
       updated_at: new Date().toISOString(),
     };
-    writeDeliveryRecord(receiptFile, record);
+    persist(receiptFile, record);
+    let result: { message_id: number };
     try {
-      const result = await tgRequest<{ message_id: number }>(
+      result = await tgRequest<{ message_id: number }>(
         "sendMessage",
         { chat_id: ctx.chatId, text: renderNotification(event) },
         ctx,
         options,
       );
-      record = {
-        ...record,
-        delivery: "confirmed",
-        confirmed_chunks: 1,
-        message_ids: [result.message_id],
-        updated_at: new Date().toISOString(),
-      };
-      writeDeliveryRecord(receiptFile, record);
     } catch (error) {
       const uncertain = isUncertain(error);
       record = {
@@ -559,8 +590,20 @@ export async function deliverNotification(
         error: errorDetails(error),
         updated_at: new Date().toISOString(),
       };
-      writeDeliveryRecord(receiptFile, record);
+      persist(receiptFile, record);
       throw new NotificationDeliveryError(record, receiptFile);
+    }
+    record = {
+      ...record,
+      delivery: "confirmed",
+      confirmed_chunks: 1,
+      message_ids: [result.message_id],
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      persist(receiptFile, record);
+    } catch (error) {
+      throw new NotificationPersistenceError(event.event_id, receiptFile, error);
     }
     return {
       event_id: event.event_id,
@@ -574,7 +617,7 @@ export async function deliverNotification(
       receipt_file: receiptFile,
     };
   } finally {
-    releaseClaim();
+    await releaseClaim();
   }
 }
 

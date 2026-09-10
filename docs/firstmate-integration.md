@@ -13,10 +13,7 @@ wrapper does not watch arbitrary chat text or infer work state.
 From the exact validated tg-axi checkout:
 
 ```sh
-corepack pnpm install --frozen-lockfile
-corepack pnpm run build
-install -d /home/ubuntu/firstmate/.local/bin
-ln -sfn "$(pwd)/dist/bin/tg-axi.js" /home/ubuntu/firstmate/.local/bin/tg-axi
+TG_AXI_CHECKOUT="$(pwd)" integrations/firstmate/install-runtime.sh
 install -m 0755 integrations/firstmate/tg-axi-notify.sh /home/ubuntu/firstmate/.local/bin/tg-axi-notify
 ```
 
@@ -25,10 +22,12 @@ runtime location `~/.claude/channels/telegram/.env` as
 `TELEGRAM_BOT_TOKEN=...`, or in the process environment. Never put it in
 Firstmate's tracked config or in an event file.
 
-Create `/home/ubuntu/firstmate/.config/tg-axi` mode 0700, copy
+Run `TG_AXI_CHECKOUT="$(pwd)" integrations/firstmate/install-runtime.sh` to
+retain the validated revision and its production dependencies outside the
+checkout. Create `/home/ubuntu/firstmate/.config/tg-axi` mode 0700, copy
 `integrations/firstmate/telegram.json.example` there as `telegram.json` mode
 0600, and replace the private chat id. It is the enabled configuration
-consumed by the wrapper and contains the absolute validated binary, private
+consumed by the wrapper and points at the retained launcher. It contains the absolute validated binary, private
 chat id, token file path, and private delivery directory. The delivery
 directory and its records are created mode 0700/0600 by tg-axi and are safe to
 inspect after restart.
@@ -82,3 +81,7 @@ blocker event from its existing wedge-alarm outcome and records a failed exit
 as an outstanding notification obligation. No watcher or chat-text inference
 is involved. This repo stages the installable caller and config; it does not
 modify live Firstmate source, config, credentials, services, or hooks.
+
+After an explicit inspection of a non-confirmed receipt, repeat the same call
+with `--retry`; the wrapper forwards that explicit decision to the retained
+runtime and still selects the configured bot and delivery directory.

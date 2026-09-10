@@ -3,13 +3,18 @@
 # one tg-axi notification result out. This script never parses chat text.
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-  printf 'usage: tg-axi-notify <telegram.json> <event.json>\n' >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  printf 'usage: tg-axi-notify <telegram.json> <event.json> [--retry]\n' >&2
   exit 2
 fi
 
 config_file=$1
 event_file=$2
+retry_flag=${3:-}
+if [ -n "$retry_flag" ] && [ "$retry_flag" != "--retry" ]; then
+  printf 'only --retry is accepted as an optional third argument\n' >&2
+  exit 2
+fi
 if [ ! -f "$config_file" ] || [ -L "$config_file" ]; then
   printf 'configuration must be a regular file: %s\n' "$config_file" >&2
   exit 2
@@ -36,5 +41,10 @@ if [ "$enabled" != true ] || [[ "$tg_bin" != /* ]] || [ ! -x "$tg_bin" ] || [ ! 
   exit 2
 fi
 
+unset TELEGRAM_BOT_TOKEN
 export TG_TOKEN_FILE="$token_file"
-exec "$tg_bin" notify --event-file "$event_file" --delivery-dir "$delivery_dir" --chat "$chat_id"
+args=(notify --event-file "$event_file" --delivery-dir "$delivery_dir" --chat "$chat_id")
+if [ -n "$retry_flag" ]; then
+  args+=(--retry)
+fi
+exec "$tg_bin" "${args[@]}"

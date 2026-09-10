@@ -32,8 +32,8 @@ Use tg-axi whenever a task needs to control a Telegram bot channel: deliver an o
 6. Messages longer than 4096 chars are split into multiple sendMessage calls automatically; 429s are retried with backoff.
 
 ### Firstmate notifications
-7. At a verified review-ready, completion, or blocker outcome, write a versioned event JSON containing a stable `event_id`, short Traditional Chinese `summary`, and one to three real HTTPS `links`, then run `tg-axi notify --event-file ./event.json`. The event and private delivery receipt are persisted before sending.
-8. Replay of a confirmed event returns `notification: deduplicated` without another Telegram request. A failed or unknown receipt is never retried implicitly; inspect `tg-axi notify status` and use `--retry` only after an explicit decision.
+7. At a verified review-ready, completion, or blocker outcome, write a versioned event JSON containing a stable `event_id`, short Traditional Chinese `summary`, and one to three real HTTPS `links`, then run `/home/ubuntu/firstmate/.local/bin/tg-axi-notify /home/ubuntu/firstmate/.config/tg-axi/telegram.json ./event.json`. The configured wrapper selects the enabled binary, private recipient, token file, and delivery directory.
+8. Replay of a confirmed event returns `notification: deduplicated` without another Telegram request. A failed or unknown receipt is never retried implicitly; inspect the configured delivery directory and repeat the wrapper with `--retry` only after an explicit decision.
 
 ### Inbound (receive)
 9. Drain one batch of pending messages: `tg-axi receive`. All message types are normalized (text/voice/audio/photo/video/video_note/document/animation/sticker/location/contact); media is downloaded to `~/.claude/channels/telegram/inbox/` via getFile then the /file/bot<token>/ endpoint. The offset is persisted so the next `receive` is resumable + idempotent (never re-fetches already-acked updates).

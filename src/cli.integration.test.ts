@@ -204,6 +204,7 @@ describe("createSkillMarkdown", () => {
     expect(md).toContain("commands[7]:");
     expect(md).toContain("validated installed `tg-axi` executable");
     expect(md).not.toContain("npx -y tg-axi");
+    expect(md).toContain("/home/ubuntu/firstmate/.local/bin/tg-axi-notify");
   });
 
   it("documents receive/listen inbound flow", () => {
